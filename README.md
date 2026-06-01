@@ -37,16 +37,16 @@ See [CONSENSUS_PROTOCOL.md](CONSENSUS_PROTOCOL.md) for the protocol and [TESTING
 
 Course: Distributed Systems
 Semester: 2, 5786
-Assignment: 2 ג€” Distributed Data Storage + Blue Team Defenses
+Assignment: 2 - Distributed Data Storage + Blue Team Defenses
 
 ## Team
 
 | Student Name    | Student ID | Main Task in Assignment 2 | Hours |
 | --------------- | ---------- | ------------------------- | ----: |
-| Mohammad Drwish | 319043402  | Task 5 ג€” Blue Teaming, Defense.md, security layer (parking-common) | 12 |
-| Hady Amasha     | 326347564  | Task 1 ג€” UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
-| Fares Elias     | 324932474  | Task 2 ג€” RabbitMQ 3-node cluster + quorum queues | 18 |
-| Rojeh Safieh    | 212793824  | Task 3 ג€” Patroni Postgres cluster, Task 4 ג€” DevOps/Docker/Tests | 10 |
+| Mohammad Drwish | 319043402  | Task 5 - Blue Teaming, Defense.md, security layer (parking-common) | 12 |
+| Hady Amasha     | 326347564  | Task 1 - UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
+| Fares Elias     | 324932474  | Task 2 - RabbitMQ 3-node cluster + quorum queues | 18 |
+| Rojeh Safieh    | 212793824  | Task 3 - Patroni Postgres cluster, Task 4 - DevOps/Docker/Tests | 10 |
 
 Hour estimates are pre-grading; final tally is in the team retro.
 
@@ -224,41 +224,41 @@ failure.
 
 ## Documentation
 
-- [`Defense.md`](Defense.md) ג€” Blue Team report (executive summary,
+- [`Defense.md`](Defense.md) - Blue Team report (executive summary,
   vulnerability inventory, root cause, fixes, security architecture, test
   results, lessons learned).
-- [`DEPLOY.md`](DEPLOY.md) ג€” single-machine and 3-host deployment.
-- [`LAB_9_LAPTOPS.md`](LAB_9_LAPTOPS.md) ג€” from-zero 9-computer classroom
+- [`DEPLOY.md`](DEPLOY.md) - single-machine and 3-host deployment.
+- [`LAB_9_LAPTOPS.md`](LAB_9_LAPTOPS.md) - from-zero 9-computer classroom
   deployment and 3-computer smoke test.
-- [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) ג€” Postgres schema and cluster
+- [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) - Postgres schema and cluster
   topology.
-- [`QUEUE_DESIGN.md`](QUEUE_DESIGN.md) ג€” RabbitMQ topology, quorum queues,
+- [`QUEUE_DESIGN.md`](QUEUE_DESIGN.md) - RabbitMQ topology, quorum queues,
   per-service ACL.
-- [`TESTING.md`](TESTING.md) ג€” acceptance tests, failover tests, security
+- [`TESTING.md`](TESTING.md) - acceptance tests, failover tests, security
   tests.
 
 ## Repository layout (Red-Team package)
 
 ```
 Parking-System-Red-Team-Assignment2.zip
-ג”ג”€ג”€ customer-ui-1.0.jar
-ג”ג”€ג”€ peo-ui-1.0.jar
-ג”ג”€ג”€ mo-ui-1.0.jar
-ג”ג”€ג”€ parking-server-1.0.jar
-ג”ג”€ג”€ distributions/
-ג”ג”€ג”€ docker-compose.yml
-ג”ג”€ג”€ docker-compose.tls.yml
-ג”ג”€ג”€ infra/
-ג”ג”€ג”€ scripts/
-ג”ג”€ג”€ local-libs/
-ג”ג”€ג”€ setup-data/
-ג”ג”€ג”€ README.md
-ג”ג”€ג”€ DEPLOY.md
-ג”ג”€ג”€ Defense.md
-ג”ג”€ג”€ DATABASE_DESIGN.md
-ג”ג”€ג”€ QUEUE_DESIGN.md
-ג”ג”€ג”€ TESTING.md
-ג””ג”€ג”€ RED_TEAM_PACKAGE.md
+|-- customer-ui-1.0.jar
+|-- peo-ui-1.0.jar
+|-- mo-ui-1.0.jar
+|-- parking-server-1.0.jar
+|-- distributions/
+|-- docker-compose.yml
+|-- docker-compose.tls.yml
+|-- infra/
+|-- scripts/
+|-- local-libs/
+|-- setup-data/
+|-- README.md
+|-- DEPLOY.md
+|-- Defense.md
+|-- DATABASE_DESIGN.md
+|-- QUEUE_DESIGN.md
+|-- TESTING.md
+`-- RED_TEAM_PACKAGE.md
 ```
 
 Source code is **not** included in the red-team package, per the
