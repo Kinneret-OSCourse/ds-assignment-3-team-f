@@ -1,0 +1,10 @@
+/*
+ * Mulligan Parking System - root settings.
+ */
+rootProject.name = 'parking-system'
+include 'parking-common'
+include 'parking-system-CustomerUI'
+include 'parking-system-MOUI'
+include 'parking-system-PEOUI'
+include 'parking-server'
+include 'recommender-server'

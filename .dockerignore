@@ -1,0 +1,14 @@
+.git
+.github
+.gradle
+**/.gradle
+**/build
+**/out
+**/.idea
+**/.vscode
+*.zip
+*.7z
+*.tgz
+*.tar
+*.tar.gz
+**/*.log

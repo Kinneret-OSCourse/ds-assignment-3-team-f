@@ -1,0 +1,336 @@
+# Mulligan Parking System - Assignment 2 distributed deployment.
+#
+# Brings up:
+#  * 3-node PostgreSQL cluster managed by Patroni (patroni-1/2/3) with etcd
+#    as the DCS and HAProxy in front exposing the current primary on port 5432.
+#  * 3-node RabbitMQ cluster (rabbit-1/2/3) joined by a shared Erlang cookie,
+#    with quorum queues declared by the parking-server boot routine. rabbit-1
+#    imports infra/rabbitmq/definitions.json so per-service users
+#    (mulligan_customer/peo/mo/server) exist with least-privilege ACLs and the
+#    default 'guest' user is disabled for remote access.
+#  * parking-server, customer-ui, peo-ui, mo-ui all carry the MULLIGAN_*
+#    environment variables that enable AMQP failover, multi-host JDBC, the
+#    shared HMAC key and a persistent security log volume.
+#
+# Quickstart:
+#   ./scripts/generate-certs.sh
+#   export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
+#   docker compose up --build
+#
+
+x-mulligan-app-env: &mulligan-app-env
+  MULLIGAN_DB_HOSTS: ${MULLIGAN_DB_HOSTS:-haproxy:5432}
+  MULLIGAN_DB_NAME: mulligan_db
+  MULLIGAN_DB_USER: mulligan_app
+  MULLIGAN_DB_PASSWORD: ${MULLIGAN_DB_APP_PASSWORD:-mulligan_app_pw}
+  MULLIGAN_DB_TLS: ${MULLIGAN_DB_TLS:-false}
+  MULLIGAN_QUEUE_HOSTS: ${MULLIGAN_QUEUE_HOSTS:-rabbit-1:5672,rabbit-2:5672,rabbit-3:5672}
+  MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-false}
+  MULLIGAN_TLS_TRUSTSTORE: ${MULLIGAN_TLS_TRUSTSTORE:-}
+  MULLIGAN_TLS_TRUSTSTORE_PASSWORD: ${MULLIGAN_TLS_TRUSTSTORE_PASSWORD:-}
+  MULLIGAN_TLS_KEYSTORE: ${MULLIGAN_TLS_KEYSTORE:-}
+  MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_KEYSTORE_PASSWORD:-}
+  MULLIGAN_HMAC_KEY: ${MULLIGAN_HMAC_KEY:-changeme0000000000000000000000000000000000000000000000000000000}
+  MULLIGAN_SECURITY_LOG: /var/log/mulligan/security.log
+
+services:
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    environment:
+      ETCD_NAME: etcd0
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_INITIAL_CLUSTER: etcd0=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_INITIAL_CLUSTER_TOKEN: mulligan-etcd
+      ALLOW_NONE_AUTHENTICATION: "yes"
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health", "--endpoints=http://etcd:2379"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  patroni-1:
+    image: ghcr.io/zalando/spilo-16:3.2-p3
+    hostname: patroni-1
+    environment: &patroni-env
+      ETCD3_HOSTS: '"etcd:2379"'
+      SCOPE: mulligan
+      PGUSER_SUPERUSER: postgres
+      PGPASSWORD_SUPERUSER: ${MULLIGAN_DB_SUPER_PASSWORD:-mulligan_super_pw}
+      PGUSER_ADMIN: admin
+      PGPASSWORD_ADMIN: ${MULLIGAN_DB_ADMIN_PASSWORD:-mulligan_admin_pw}
+      PGUSER_STANDBY: standby
+      PGPASSWORD_STANDBY: ${MULLIGAN_DB_STANDBY_PASSWORD:-mulligan_standby_pw}
+      PGVERSION: 16
+      ALLOW_NOSSL: "true"
+      PGNAME: patroni-1
+    volumes:
+      - patroni1_data:/home/postgres/pgdata
+      - ./infra/postgres/init.sql:/scripts/post_init.d/01-init.sql:ro
+      - ./infra/postgres/full-seed.sql:/scripts/post_init.d/02-seed.sql:ro
+      - ./infra/postgres/cluster-bootstrap.sql:/scripts/post_init.d/03-cluster-bootstrap.sql:ro
+    depends_on:
+      etcd:
+        condition: service_healthy
+
+  patroni-2:
+    image: ghcr.io/zalando/spilo-16:3.2-p3
+    hostname: patroni-2
+    environment:
+      <<: *patroni-env
+      PGNAME: patroni-2
+    volumes:
+      - patroni2_data:/home/postgres/pgdata
+    depends_on:
+      etcd:
+        condition: service_healthy
+
+  patroni-3:
+    image: ghcr.io/zalando/spilo-16:3.2-p3
+    hostname: patroni-3
+    environment:
+      <<: *patroni-env
+      PGNAME: patroni-3
+    volumes:
+      - patroni3_data:/home/postgres/pgdata
+    depends_on:
+      etcd:
+        condition: service_healthy
+
+  haproxy:
+    image: haproxy:2.9-alpine
+    volumes:
+      - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${MULLIGAN_DB_PORT:-5432}:5432"
+      - "${MULLIGAN_HAPROXY_STATS_PORT:-7000}:7000"
+    depends_on:
+      - patroni-1
+      - patroni-2
+      - patroni-3
+
+  db-init:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${MULLIGAN_DB_SUPER_PASSWORD:-mulligan_super_pw}
+    volumes:
+      - ./infra/postgres/init.sql:/sql/01-init.sql:ro
+      - ./infra/postgres/full-seed.sql:/sql/02-seed.sql:ro
+      - ./infra/postgres/cluster-bootstrap.sql:/sql/03-cluster-bootstrap.sql:ro
+    depends_on:
+      - haproxy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        until pg_isready -h haproxy -p 5432 -U postgres; do sleep 2; done
+        psql -h haproxy -p 5432 -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'mulligan_db'" | grep -q 1 \
+          || psql -h haproxy -p 5432 -U postgres -d postgres -c "CREATE DATABASE mulligan_db"
+        psql -h haproxy -p 5432 -U postgres -d mulligan_db -tc "SELECT to_regclass('public.payment_transactions')" | grep -q payment_transactions \
+          || psql -h haproxy -p 5432 -U postgres -d mulligan_db -v ON_ERROR_STOP=1 -f /sql/02-seed.sql
+        psql -h haproxy -p 5432 -U postgres -d mulligan_db -v ON_ERROR_STOP=1 -f /sql/03-cluster-bootstrap.sql
+
+  rabbit-1:
+    image: rabbitmq:3.13-management
+    hostname: rabbit-1
+    environment: &rabbit-env
+      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBIT_COOKIE:-mulligansharedcookie}
+      RABBITMQ_NODENAME: rabbit@rabbit-1
+      RABBITMQ_DEFAULT_USER: ${MULLIGAN_RABBIT_ADMIN_USER:-mulligan_admin}
+      RABBITMQ_DEFAULT_PASS: ${MULLIGAN_RABBIT_ADMIN_PASSWORD:-mulligan_admin_pw}
+    volumes:
+      - rabbit1_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    extra_hosts:
+      - "rabbit-4:10.0.201.7"
+      - "rabbit-5:10.0.201.28"
+    ports:
+      - "${MULLIGAN_RABBIT_AMQP_PORT:-5672}:5672"
+      - "${MULLIGAN_RABBIT_MANAGEMENT_PORT:-15672}:15672"
+      - "4369:4369"
+      - "25672:25672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  rabbit-2:
+    image: rabbitmq:3.13-management
+    hostname: rabbit-2
+    environment:
+      <<: *rabbit-env
+      RABBITMQ_NODENAME: rabbit@rabbit-2
+    volumes:
+      - rabbit2_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    depends_on:
+      rabbit-1:
+        condition: service_healthy
+
+  rabbit-3:
+    image: rabbitmq:3.13-management
+    hostname: rabbit-3
+    environment:
+      <<: *rabbit-env
+      RABBITMQ_NODENAME: rabbit@rabbit-3
+    volumes:
+      - rabbit3_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    depends_on:
+      rabbit-1:
+        condition: service_healthy
+
+  parking-server:
+    build:
+      context: .
+      dockerfile: parking-server/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_QUEUE_USER_SERVER: mulligan_server
+      MULLIGAN_QUEUE_PASSWORD_SERVER: ${MULLIGAN_QUEUE_SERVER_PASSWORD:-mulligan_server_pw}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      rabbit-1:
+        condition: service_healthy
+    restart: on-failure
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  customer-ui:
+    build:
+      context: .
+      dockerfile: parking-system-CustomerUI/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_QUEUE_USER_CUSTOMER: mulligan_customer
+      MULLIGAN_QUEUE_PASSWORD_CUSTOMER: ${MULLIGAN_QUEUE_CUSTOMER_PASSWORD:-mulligan_customer_pw}
+      MULLIGAN_RECOMMENDER_URL: http://recommender-1:8080
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      rabbit-1:
+        condition: service_healthy
+    entrypoint: ["tail", "-f", "/dev/null"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  recommender-1:
+    build:
+      context: .
+      dockerfile: recommender-server/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: recommender-1
+      MULLIGAN_RECOMMENDER_PORT: 8080
+      MULLIGAN_RECOMMENDER_PEERS: http://recommender-2:8080,http://recommender-3:8080
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_1_MALICIOUS:-false}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "${MULLIGAN_RECOMMENDER_1_PORT:-8081}:8080"
+    restart: on-failure
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  recommender-2:
+    build:
+      context: .
+      dockerfile: recommender-server/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: recommender-2
+      MULLIGAN_RECOMMENDER_PORT: 8080
+      MULLIGAN_RECOMMENDER_PEERS: http://recommender-1:8080,http://recommender-3:8080
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_2_MALICIOUS:-false}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "${MULLIGAN_RECOMMENDER_2_PORT:-8082}:8080"
+    restart: on-failure
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  recommender-3:
+    build:
+      context: .
+      dockerfile: recommender-server/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: recommender-3
+      MULLIGAN_RECOMMENDER_PORT: 8080
+      MULLIGAN_RECOMMENDER_PEERS: http://recommender-1:8080,http://recommender-2:8080
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_3_MALICIOUS:-false}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "${MULLIGAN_RECOMMENDER_3_PORT:-8083}:8080"
+    restart: on-failure
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  peo-ui:
+    build:
+      context: .
+      dockerfile: parking-system-PEOUI/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_QUEUE_USER_PEO: mulligan_peo
+      MULLIGAN_QUEUE_PASSWORD_PEO: ${MULLIGAN_QUEUE_PEO_PASSWORD:-mulligan_peo_pw}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      rabbit-1:
+        condition: service_healthy
+    entrypoint: ["tail", "-f", "/dev/null"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  mo-ui:
+    build:
+      context: .
+      dockerfile: parking-system-MOUI/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_QUEUE_USER_MO: mulligan_mo
+      MULLIGAN_QUEUE_PASSWORD_MO: ${MULLIGAN_QUEUE_MO_PASSWORD:-mulligan_mo_pw}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      rabbit-1:
+        condition: service_healthy
+    entrypoint: ["tail", "-f", "/dev/null"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+volumes:
+  etcd_data:
+  patroni1_data:
+  patroni2_data:
+  patroni3_data:
+  rabbit1_data:
+  rabbit2_data:
+  rabbit3_data:
+  mulligan_logs:

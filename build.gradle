@@ -1,0 +1,12 @@
+plugins {
+    id 'base'
+}
+
+allprojects {
+    def safeProjectName = project.path == ':' ? 'root' : project.path.substring(1).replace(':', '-')
+    buildDir = file("${System.getProperty('user.home')}/.mulligan-gradle-build/${rootProject.name}/${safeProjectName}")
+
+    repositories {
+        mavenCentral()
+    }
+}

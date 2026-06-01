@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.mulligan.recommender'
+version = '1.0-SNAPSHOT'
+
+application {
+    mainClass.set('com.mulligan.recommender.RecommenderApplication')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':parking-common')
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+test {
+    useJUnitPlatform()
+}

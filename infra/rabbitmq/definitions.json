@@ -1,0 +1,137 @@
+{
+  "rabbit_version": "3.13",
+  "users": [
+    {
+      "name": "mulligan_admin",
+      "password": "mulligan_admin_pw",
+      "tags": "administrator",
+      "limits": {}
+    },
+    {
+      "name": "mulligan_server",
+      "password": "mulligan_server_pw",
+      "tags": "",
+      "limits": {}
+    },
+    {
+      "name": "mulligan_customer",
+      "password": "mulligan_customer_pw",
+      "tags": "",
+      "limits": {}
+    },
+    {
+      "name": "mulligan_peo",
+      "password": "mulligan_peo_pw",
+      "tags": "",
+      "limits": {}
+    },
+    {
+      "name": "mulligan_mo",
+      "password": "mulligan_mo_pw",
+      "tags": "",
+      "limits": {}
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "mulligan_admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write":     ".*",
+      "read":      ".*"
+    },
+    {
+      "user": "mulligan_server",
+      "vhost": "/",
+      "configure": "^(mulligan\\.exchange|Transactions|Citations)$",
+      "write":     "^(mulligan\\.exchange|Transactions|Citations)$",
+      "read":      "^(mulligan\\.exchange|Transactions|Citations)$"
+    },
+    {
+      "user": "mulligan_customer",
+      "vhost": "/",
+      "configure": "^$",
+      "write":     "^mulligan\\.exchange$",
+      "read":      "^$"
+    },
+    {
+      "user": "mulligan_peo",
+      "vhost": "/",
+      "configure": "^$",
+      "write":     "^mulligan\\.exchange$",
+      "read":      "^$"
+    },
+    {
+      "user": "mulligan_mo",
+      "vhost": "/",
+      "configure": "^$",
+      "write":     "^$",
+      "read":      "^(Transactions|Citations)$"
+    }
+  ],
+  "topic_permissions": [
+    {
+      "user": "mulligan_customer",
+      "vhost": "/",
+      "exchange": "mulligan.exchange",
+      "write": "^transaction\\.completed$",
+      "read":  "^$"
+    },
+    {
+      "user": "mulligan_peo",
+      "vhost": "/",
+      "exchange": "mulligan.exchange",
+      "write": "^citation\\.issued$",
+      "read":  "^$"
+    }
+  ],
+  "policies": [],
+  "queues": [
+    {
+      "name": "Transactions",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    },
+    {
+      "name": "Citations",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "mulligan.exchange",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "mulligan.exchange",
+      "vhost": "/",
+      "destination": "Transactions",
+      "destination_type": "queue",
+      "routing_key": "transaction.completed",
+      "arguments": {}
+    },
+    {
+      "source": "mulligan.exchange",
+      "vhost": "/",
+      "destination": "Citations",
+      "destination_type": "queue",
+      "routing_key": "citation.issued",
+      "arguments": {}
+    }
+  ]
+}

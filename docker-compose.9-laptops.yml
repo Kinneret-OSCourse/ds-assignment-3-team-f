@@ -1,0 +1,230 @@
+x-cluster-hosts: &cluster_hosts
+  - "postgres-node1:${LAB_DB1_IP:?set LAB_DB1_IP}"
+  - "postgres-node2:${LAB_DB2_IP:?set LAB_DB2_IP}"
+  - "postgres-node3:${LAB_DB3_IP:?set LAB_DB3_IP}"
+  - "rabbitmq1:${LAB_RMQ1_IP:?set LAB_RMQ1_IP}"
+  - "rabbitmq2:${LAB_RMQ2_IP:?set LAB_RMQ2_IP}"
+  - "rabbitmq3:${LAB_RMQ3_IP:?set LAB_RMQ3_IP}"
+
+x-postgres-env: &postgres_env
+  POSTGRESQL_POSTGRES_PASSWORD: ${MULLIGAN_DB_PASSWORD:?set MULLIGAN_DB_PASSWORD}
+  POSTGRESQL_USERNAME: postgres
+  POSTGRESQL_PASSWORD: ${MULLIGAN_DB_PASSWORD:?set MULLIGAN_DB_PASSWORD}
+  POSTGRESQL_DATABASE: mulligan_db
+  REPMGR_USERNAME: repmgr
+  REPMGR_PASSWORD: ${MULLIGAN_REPMGR_PASSWORD:?set MULLIGAN_REPMGR_PASSWORD}
+  REPMGR_PRIMARY_HOST: postgres-node1
+  REPMGR_PARTNER_NODES: postgres-node1,postgres-node2,postgres-node3
+
+services:
+  postgres-node1:
+    profiles: ["db1"]
+    image: bitnamilegacy/postgresql-repmgr:16
+    hostname: postgres-node1
+    ports:
+      - "5432:5432"
+
+    extra_hosts: *cluster_hosts
+
+    environment:
+      <<: *postgres_env
+      REPMGR_NODE_ID: 1
+      REPMGR_NODE_NAME: postgres-node-1
+      REPMGR_NODE_NETWORK_NAME: postgres-node1
+    volumes:
+      - postgres_node1_data:/bitnami/postgresql
+      - ./infra/postgres/full-seed.sql:/docker-entrypoint-initdb.d/01-full-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mulligan_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres-node2:
+    profiles: ["db2"]
+    image: bitnamilegacy/postgresql-repmgr:16
+    hostname: postgres-node2
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        /opt/bitnami/scripts/postgresql-repmgr/setup.sh || true
+        rm -f /tmp/repmgrd.pid /opt/bitnami/postgresql/tmp/.s.PGSQL.5432.lock
+        exec "$${REPMGR_RUN_SCRIPT}"
+    ports:
+      - "5432:5432"
+    extra_hosts: *cluster_hosts
+    environment:
+      <<: *postgres_env
+      REPMGR_RUN_SCRIPT: /opt/bitnami/scripts/postgresql-repmgr/run.sh
+      REPMGR_NODE_ID: 2
+      REPMGR_NODE_NAME: postgres-node-2
+      REPMGR_NODE_NETWORK_NAME: postgres-node2
+    volumes:
+      - postgres_node2_data:/bitnami/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mulligan_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres-node3:
+    profiles: ["db3"]
+    image: bitnamilegacy/postgresql-repmgr:16
+    hostname: postgres-node3
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        /opt/bitnami/scripts/postgresql-repmgr/setup.sh || true
+        rm -f /tmp/repmgrd.pid /opt/bitnami/postgresql/tmp/.s.PGSQL.5432.lock
+        exec "$${REPMGR_RUN_SCRIPT}"
+    ports:
+      - "5432:5432"
+    extra_hosts: *cluster_hosts
+    environment:
+      <<: *postgres_env
+      REPMGR_RUN_SCRIPT: /opt/bitnami/scripts/postgresql-repmgr/run.sh
+      REPMGR_NODE_ID: 3
+      REPMGR_NODE_NAME: postgres-node-3
+      REPMGR_NODE_NETWORK_NAME: postgres-node3
+    volumes:
+      - postgres_node3_data:/bitnami/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mulligan_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq1:
+    profiles: ["rmq1"]
+    image: rabbitmq:3.13-management
+    hostname: rabbitmq1
+    ports:
+      - "4369:4369"
+      - "25672:25672"
+      - "5671:5671"
+      - "15671:15671"
+    extra_hosts: *cluster_hosts
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
+      RABBITMQ_NODENAME: rabbit@rabbitmq1
+      RABBITMQ_DEFAULT_USER: queue_admin
+      RABBITMQ_DEFAULT_PASS: ${MULLIGAN_QUEUE_ADMIN_PASSWORD:?set MULLIGAN_QUEUE_ADMIN_PASSWORD}
+      MULLIGAN_QUEUE_CUSTOMER_PASSWORD: ${MULLIGAN_QUEUE_CUSTOMER_PASSWORD:?set MULLIGAN_QUEUE_CUSTOMER_PASSWORD}
+      MULLIGAN_QUEUE_PEO_PASSWORD: ${MULLIGAN_QUEUE_PEO_PASSWORD:?set MULLIGAN_QUEUE_PEO_PASSWORD}
+      MULLIGAN_QUEUE_MO_PASSWORD: ${MULLIGAN_QUEUE_MO_PASSWORD:?set MULLIGAN_QUEUE_MO_PASSWORD}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        rabbitmq-server &
+        pid="$$!"
+        until rabbitmq-diagnostics -q check_running; do sleep 2; done
+        rabbitmqctl add_user queue_admin "$${RABBITMQ_DEFAULT_PASS}" 2>/dev/null || rabbitmqctl change_password queue_admin "$${RABBITMQ_DEFAULT_PASS}"
+        rabbitmqctl set_user_tags queue_admin administrator
+        rabbitmqctl add_user customer_publisher "$${MULLIGAN_QUEUE_CUSTOMER_PASSWORD}" 2>/dev/null || rabbitmqctl change_password customer_publisher "$${MULLIGAN_QUEUE_CUSTOMER_PASSWORD}"
+        rabbitmqctl add_user peo_publisher "$${MULLIGAN_QUEUE_PEO_PASSWORD}" 2>/dev/null || rabbitmqctl change_password peo_publisher "$${MULLIGAN_QUEUE_PEO_PASSWORD}"
+        rabbitmqctl add_user mo_consumer "$${MULLIGAN_QUEUE_MO_PASSWORD}" 2>/dev/null || rabbitmqctl change_password mo_consumer "$${MULLIGAN_QUEUE_MO_PASSWORD}"
+        rabbitmqctl set_permissions -p / customer_publisher "" "mulligan\\.exchange" ""
+        rabbitmqctl set_permissions -p / peo_publisher "" "mulligan\\.exchange" ""
+        rabbitmqctl set_permissions -p / mo_consumer "" "" "Transactions|Citations"
+        rabbitmqctl clear_password guest || true
+        rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+        wait "$$pid"
+    volumes:
+      - rabbitmq1_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq2:
+    profiles: ["rmq2"]
+    image: rabbitmq:3.13-management
+    hostname: rabbitmq2
+    ports:
+      - "4369:4369"
+      - "25672:25672"
+      - "5671:5671"
+      - "15671:15671"
+    extra_hosts: *cluster_hosts
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
+      RABBITMQ_NODENAME: rabbit@rabbitmq2
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        rabbitmq-server &
+        pid="$$!"
+        until rabbitmq-diagnostics -q check_running; do sleep 2; done
+        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbitmq1"; then
+          rabbitmqctl stop_app
+          rabbitmqctl reset
+          rabbitmqctl join_cluster rabbit@rabbitmq1
+          rabbitmqctl start_app
+        fi
+        rabbitmq-queues add_member Transactions rabbit@rabbitmq2 || true
+        rabbitmq-queues add_member Citations rabbit@rabbitmq2 || true
+        wait "$$pid"
+    volumes:
+      - rabbitmq2_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq3:
+    profiles: ["rmq3"]
+    image: rabbitmq:3.13-management
+    hostname: rabbitmq3
+    ports:
+      - "4369:4369"
+      - "25672:25672"
+      - "5671:5671"
+      - "15671:15671"
+    extra_hosts: *cluster_hosts
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
+      RABBITMQ_NODENAME: rabbit@rabbitmq3
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        rabbitmq-server &
+        pid="$$!"
+        until rabbitmq-diagnostics -q check_running; do sleep 2; done
+        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbitmq1"; then
+          rabbitmqctl stop_app
+          rabbitmqctl reset
+          rabbitmqctl join_cluster rabbit@rabbitmq1
+          rabbitmqctl start_app
+        fi
+        rabbitmq-queues add_member Transactions rabbit@rabbitmq3 || true
+        rabbitmq-queues add_member Citations rabbit@rabbitmq3 || true
+        wait "$$pid"
+    volumes:
+      - rabbitmq3_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_node1_data:
+  postgres_node2_data:
+  postgres_node3_data:
+  rabbitmq1_data:
+  rabbitmq2_data:
+  rabbitmq3_data:
