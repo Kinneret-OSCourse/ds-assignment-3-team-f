@@ -1,16 +1,7 @@
-﻿# Mulligan Parking System ג€” Assignment 2
+﻿# Mulligan Parking System  Assignment 3
 
 Course: Distributed Systems
 Semester: 2, 5786
-
-## Assignment 3 Update
-
-This repository now includes the recommender cluster, majority consensus
-protocol, 12-computer deployment support, and hardened RabbitMQ mTLS defaults
-required for Assignment 3.
-Assignment: 2 ג€” Distributed Data Storage + Blue Team Defenses
-
-## Assignment 3 Submission Scope
 
 The old Round 2 exploit package and generated evidence were removed from the
 source tree. Assignment 3 keeps the blue-team fixes, implementation, deployment
