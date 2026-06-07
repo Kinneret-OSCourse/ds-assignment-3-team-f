@@ -5,7 +5,10 @@ Semester: 2, 5786
 
 The old Round 2 exploit package and generated evidence were removed from the
 source tree. Assignment 3 keeps the blue-team fixes, implementation, deployment
-files, and design/test documentation needed to build and grade the system.
+files, and design/test documentation needed to build and grade the system
+
+
+## Team
 
 | Student Name    | Student ID | Main Task in Red Teaming 2 | Hours |
 | --------------- | ---------- | -------------------------- | ----: |
@@ -14,14 +17,7 @@ files, and design/test documentation needed to build and grade the system.
 | Fares Elias     | 324932474  | RabbitMQ attack validation | 3 |
 | Rojeh Safieh    | 212793824  | Database/TLS attack validation | 3 |
 
-## Team
 
-| Student Name    | Student ID | Main Task in Assignment 2 | Hours |
-| --------------- | ---------- | ------------------------- | ----: |
-| Mohammad Drwish | 319043402  | Task 5 ג€” Blue Teaming, Defense.md, security layer (parking-common) | 12 |
-| Hady Amasha     | 326347564  | Task 1 ג€” UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
-| Fares Elias     | 324932474  | Task 2 ג€” RabbitMQ 3-node cluster + quorum queues | 18 |
-| Rojeh Safieh    | 212793824  | Task 3 ג€” Patroni Postgres cluster, Task 4 ג€” DevOps/Docker/Tests | 10 |
 
 Hour estimates are pre-grading; final tally is in the team retro.
 
