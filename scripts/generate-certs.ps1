@@ -10,11 +10,12 @@ if ([string]::IsNullOrWhiteSpace($Password)) {
 
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $out = Join-Path $root "infra\certs"
+$privateOut = Join-Path $root "infra\private-ca"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
+New-Item -ItemType Directory -Force -Path $privateOut | Out-Null
 
 $requiredFiles = @(
     "ca.pem",
-    "ca-key.pem",
     "server-cert.pem",
     "server-key.pem",
     "truststore.p12",
@@ -163,7 +164,7 @@ $rng.Dispose()
 $serverCert = $serverReq.Create($caCert, [DateTimeOffset]::UtcNow.AddDays(-1), [DateTimeOffset]::UtcNow.AddDays(825), $serial)
 
 Write-Pem (Join-Path $out "ca.pem") "CERTIFICATE" $caCert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)
-Write-Pem (Join-Path $out "ca-key.pem") "RSA PRIVATE KEY" (Export-RsaPrivateKeyPkcs1 $caKey)
+Write-Pem (Join-Path $privateOut "ca-key.pem") "RSA PRIVATE KEY" (Export-RsaPrivateKeyPkcs1 $caKey)
 Write-Pem (Join-Path $out "server-cert.pem") "CERTIFICATE" $serverCert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert)
 Write-Pem (Join-Path $out "server-key.pem") "RSA PRIVATE KEY" (Export-RsaPrivateKeyPkcs1 $serverKey)
 

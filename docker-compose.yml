@@ -1,4 +1,4 @@
-# Mulligan Parking System - Assignment 2 distributed deployment.
+# Mulligan Parking System - Assignment 3 distributed deployment.
 #
 # Brings up:
 #  * 3-node PostgreSQL cluster managed by Patroni (patroni-1/2/3) with etcd
@@ -8,9 +8,11 @@
 #    imports infra/rabbitmq/definitions.json so per-service users
 #    (mulligan_customer/peo/mo/server) exist with least-privilege ACLs and the
 #    default 'guest' user is disabled for remote access.
-#  * parking-server, customer-ui, peo-ui, mo-ui all carry the MULLIGAN_*
-#    environment variables that enable AMQP failover, multi-host JDBC, the
-#    shared HMAC key and a persistent security log volume.
+#  * 3-node recommender cluster (rec-1/2/3) used by the Customer UI/CLI for
+#    majority-consensus parking recommendations.
+#  * parking-server, customer-ui, peo-ui, mo-ui and the recommender nodes all
+#    carry the MULLIGAN_* environment variables that enable failover,
+#    signed messages, shared nonce storage and a persistent security log.
 #
 # Quickstart:
 #   ./scripts/generate-certs.sh
@@ -24,13 +26,15 @@ x-mulligan-app-env: &mulligan-app-env
   MULLIGAN_DB_USER: mulligan_app
   MULLIGAN_DB_PASSWORD: ${MULLIGAN_DB_APP_PASSWORD:-mulligan_app_pw}
   MULLIGAN_DB_TLS: ${MULLIGAN_DB_TLS:-false}
-  MULLIGAN_QUEUE_HOSTS: ${MULLIGAN_QUEUE_HOSTS:-rabbit-1:5672,rabbit-2:5672,rabbit-3:5672}
-  MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-false}
-  MULLIGAN_TLS_TRUSTSTORE: ${MULLIGAN_TLS_TRUSTSTORE:-}
-  MULLIGAN_TLS_TRUSTSTORE_PASSWORD: ${MULLIGAN_TLS_TRUSTSTORE_PASSWORD:-}
+  MULLIGAN_QUEUE_HOSTS: ${MULLIGAN_QUEUE_HOSTS:-rabbit-1:5671,rabbit-2:5671,rabbit-3:5671}
+  MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-true}
+  MULLIGAN_TLS_TRUSTSTORE: ${MULLIGAN_TLS_TRUSTSTORE:-/etc/mulligan/certs/truststore.p12}
+  MULLIGAN_TLS_TRUSTSTORE_PASSWORD: ${MULLIGAN_TLS_TRUSTSTORE_PASSWORD:-mulligan_tls_pw}
   MULLIGAN_TLS_KEYSTORE: ${MULLIGAN_TLS_KEYSTORE:-}
   MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_KEYSTORE_PASSWORD:-}
   MULLIGAN_HMAC_KEY: ${MULLIGAN_HMAC_KEY:-changeme0000000000000000000000000000000000000000000000000000000}
+  MULLIGAN_NONCE_STORE: ${MULLIGAN_NONCE_STORE:-jdbc}
+  MULLIGAN_RECOMMENDER_ENDPOINTS: ${MULLIGAN_RECOMMENDER_ENDPOINTS:-http://rec-1:8081,http://rec-2:8082,http://rec-3:8083}
   MULLIGAN_SECURITY_LOG: /var/log/mulligan/security.log
 
 services:
@@ -108,8 +112,8 @@ services:
     volumes:
       - ./infra/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
-      - "${MULLIGAN_DB_PORT:-5432}:5432"
-      - "${MULLIGAN_HAPROXY_STATS_PORT:-7000}:7000"
+      - "127.0.0.1:${MULLIGAN_DB_PORT:-5432}:5432"
+      - "127.0.0.1:${MULLIGAN_HAPROXY_STATS_PORT:-7000}:7000"
     depends_on:
       - patroni-1
       - patroni-2
@@ -140,23 +144,22 @@ services:
     image: rabbitmq:3.13-management
     hostname: rabbit-1
     environment: &rabbit-env
-      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBIT_COOKIE:-mulligansharedcookie}
+      RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBIT_COOKIE:-rotate-me-9f5930d13cc74a0ba8ac9e92087f0a7f}
       RABBITMQ_NODENAME: rabbit@rabbit-1
       RABBITMQ_DEFAULT_USER: ${MULLIGAN_RABBIT_ADMIN_USER:-mulligan_admin}
       RABBITMQ_DEFAULT_PASS: ${MULLIGAN_RABBIT_ADMIN_PASSWORD:-mulligan_admin_pw}
     volumes:
       - rabbit1_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     extra_hosts:
       - "rabbit-4:10.0.201.7"
       - "rabbit-5:10.0.201.28"
     ports:
-      - "${MULLIGAN_RABBIT_AMQP_PORT:-5672}:5672"
-      - "${MULLIGAN_RABBIT_MANAGEMENT_PORT:-15672}:15672"
-      - "4369:4369"
-      - "25672:25672"
+      - "127.0.0.1:${MULLIGAN_RABBIT_AMQPS_PORT:-5671}:5671"
+      - "127.0.0.1:${MULLIGAN_RABBIT_MANAGEMENT_PORT:-15672}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -171,9 +174,10 @@ services:
       RABBITMQ_NODENAME: rabbit@rabbit-2
     volumes:
       - rabbit2_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     depends_on:
       rabbit-1:
         condition: service_healthy
@@ -186,9 +190,10 @@ services:
       RABBITMQ_NODENAME: rabbit@rabbit-3
     volumes:
       - rabbit3_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     depends_on:
       rabbit-1:
         condition: service_healthy
@@ -201,6 +206,8 @@ services:
       <<: *mulligan-app-env
       MULLIGAN_QUEUE_USER_SERVER: mulligan_server
       MULLIGAN_QUEUE_PASSWORD_SERVER: ${MULLIGAN_QUEUE_SERVER_PASSWORD:-mulligan_server_pw}
+      MULLIGAN_TLS_KEYSTORE: /etc/mulligan/certs/client-server.p12
+      MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -209,6 +216,7 @@ services:
     restart: on-failure
     volumes:
       - mulligan_logs:/var/log/mulligan
+      - ./infra/certs:/etc/mulligan/certs:ro
 
   customer-ui:
     build:
@@ -218,7 +226,8 @@ services:
       <<: *mulligan-app-env
       MULLIGAN_QUEUE_USER_CUSTOMER: mulligan_customer
       MULLIGAN_QUEUE_PASSWORD_CUSTOMER: ${MULLIGAN_QUEUE_CUSTOMER_PASSWORD:-mulligan_customer_pw}
-      MULLIGAN_RECOMMENDER_URL: http://recommender-1:8080
+      MULLIGAN_TLS_KEYSTORE: /etc/mulligan/certs/client-customer.p12
+      MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -229,63 +238,7 @@ services:
     tty: true
     volumes:
       - mulligan_logs:/var/log/mulligan
-
-  recommender-1:
-    build:
-      context: .
-      dockerfile: recommender-server/Dockerfile
-    environment:
-      <<: *mulligan-app-env
-      MULLIGAN_RECOMMENDER_NODE_ID: recommender-1
-      MULLIGAN_RECOMMENDER_PORT: 8080
-      MULLIGAN_RECOMMENDER_PEERS: http://recommender-2:8080,http://recommender-3:8080
-      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_1_MALICIOUS:-false}
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
-    ports:
-      - "${MULLIGAN_RECOMMENDER_1_PORT:-8081}:8080"
-    restart: on-failure
-    volumes:
-      - mulligan_logs:/var/log/mulligan
-
-  recommender-2:
-    build:
-      context: .
-      dockerfile: recommender-server/Dockerfile
-    environment:
-      <<: *mulligan-app-env
-      MULLIGAN_RECOMMENDER_NODE_ID: recommender-2
-      MULLIGAN_RECOMMENDER_PORT: 8080
-      MULLIGAN_RECOMMENDER_PEERS: http://recommender-1:8080,http://recommender-3:8080
-      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_2_MALICIOUS:-false}
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
-    ports:
-      - "${MULLIGAN_RECOMMENDER_2_PORT:-8082}:8080"
-    restart: on-failure
-    volumes:
-      - mulligan_logs:/var/log/mulligan
-
-  recommender-3:
-    build:
-      context: .
-      dockerfile: recommender-server/Dockerfile
-    environment:
-      <<: *mulligan-app-env
-      MULLIGAN_RECOMMENDER_NODE_ID: recommender-3
-      MULLIGAN_RECOMMENDER_PORT: 8080
-      MULLIGAN_RECOMMENDER_PEERS: http://recommender-1:8080,http://recommender-2:8080
-      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_RECOMMENDER_3_MALICIOUS:-false}
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
-    ports:
-      - "${MULLIGAN_RECOMMENDER_3_PORT:-8083}:8080"
-    restart: on-failure
-    volumes:
-      - mulligan_logs:/var/log/mulligan
+      - ./infra/certs:/etc/mulligan/certs:ro
 
   peo-ui:
     build:
@@ -295,6 +248,8 @@ services:
       <<: *mulligan-app-env
       MULLIGAN_QUEUE_USER_PEO: mulligan_peo
       MULLIGAN_QUEUE_PASSWORD_PEO: ${MULLIGAN_QUEUE_PEO_PASSWORD:-mulligan_peo_pw}
+      MULLIGAN_TLS_KEYSTORE: /etc/mulligan/certs/client-peo.p12
+      MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -305,6 +260,7 @@ services:
     tty: true
     volumes:
       - mulligan_logs:/var/log/mulligan
+      - ./infra/certs:/etc/mulligan/certs:ro
 
   mo-ui:
     build:
@@ -314,6 +270,8 @@ services:
       <<: *mulligan-app-env
       MULLIGAN_QUEUE_USER_MO: mulligan_mo
       MULLIGAN_QUEUE_PASSWORD_MO: ${MULLIGAN_QUEUE_MO_PASSWORD:-mulligan_mo_pw}
+      MULLIGAN_TLS_KEYSTORE: /etc/mulligan/certs/client-mo.p12
+      MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -322,6 +280,67 @@ services:
     entrypoint: ["tail", "-f", "/dev/null"]
     stdin_open: true
     tty: true
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+      - ./infra/certs:/etc/mulligan/certs:ro
+
+  rec-1:
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec-1
+      MULLIGAN_RECOMMENDER_PORT: 8081
+      MULLIGAN_RECOMMENDER_PEERS: http://rec-2:8082,http://rec-3:8083
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC1_MALICIOUS:-false}
+    command: ["serve", "rec-1", "8081", "http://rec-2:8082,http://rec-3:8083", "${MULLIGAN_REC1_MALICIOUS:-false}"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: on-failure
+    ports:
+      - "127.0.0.1:${MULLIGAN_REC1_PORT:-8081}:8081"
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  rec-2:
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec-2
+      MULLIGAN_RECOMMENDER_PORT: 8082
+      MULLIGAN_RECOMMENDER_PEERS: http://rec-1:8081,http://rec-3:8083
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC2_MALICIOUS:-false}
+    command: ["serve", "rec-2", "8082", "http://rec-1:8081,http://rec-3:8083", "${MULLIGAN_REC2_MALICIOUS:-false}"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: on-failure
+    ports:
+      - "127.0.0.1:${MULLIGAN_REC2_PORT:-8082}:8082"
+    volumes:
+      - mulligan_logs:/var/log/mulligan
+
+  rec-3:
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    environment:
+      <<: *mulligan-app-env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec-3
+      MULLIGAN_RECOMMENDER_PORT: 8083
+      MULLIGAN_RECOMMENDER_PEERS: http://rec-1:8081,http://rec-2:8082
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC3_MALICIOUS:-false}
+    command: ["serve", "rec-3", "8083", "http://rec-1:8081,http://rec-2:8082", "${MULLIGAN_REC3_MALICIOUS:-false}"]
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: on-failure
+    ports:
+      - "127.0.0.1:${MULLIGAN_REC3_PORT:-8083}:8083"
     volumes:
       - mulligan_logs:/var/log/mulligan
 

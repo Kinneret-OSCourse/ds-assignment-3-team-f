@@ -24,7 +24,6 @@ import java.util.List;
 public class ParkingService {
 
     private static final SecureLogger LOG = new SecureLogger("customer-ui");
-    private final RecommendationClient recommendationClient = new RecommendationClient();
 
     /**
      * Returns the {@link SecurePublisher} used to publish transaction messages.
@@ -34,16 +33,6 @@ public class ParkingService {
      */
     protected SecurePublisher publisher() {
         return new SecurePublisher(QueueConfig.createFactory(), new MessageSigner(), LOG);
-    }
-
-    /**
-     * Requests a recommendation from the recommender cluster.
-     *
-     * @param spaceId desired parking space
-     * @return assignment-formatted recommendation list or "Empty List"
-     */
-    public String recommendParking(String spaceId) {
-        return recommendationClient.recommend(spaceId);
     }
 
     /**

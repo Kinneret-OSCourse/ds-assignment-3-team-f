@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS citations (
 CREATE INDEX IF NOT EXISTS idx_citations_vehicle_id ON citations (vehicle_id);
 CREATE INDEX IF NOT EXISTS idx_citations_inspection_time ON citations (inspection_time DESC);
 
+CREATE TABLE IF NOT EXISTS security_nonces (
+    nonce VARCHAR(128) PRIMARY KEY,
+    first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_nonces_first_seen ON security_nonces(first_seen);
+
 CREATE TABLE IF NOT EXISTS customers (
     customer_id VARCHAR(32) PRIMARY KEY,
     vehicle_id INTEGER UNIQUE REFERENCES vehicles (vehicle_id) ON UPDATE CASCADE ON DELETE RESTRICT,

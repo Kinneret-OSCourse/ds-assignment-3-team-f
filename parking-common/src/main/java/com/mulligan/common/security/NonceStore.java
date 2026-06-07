@@ -1,5 +1,8 @@
 package com.mulligan.common.security;
 
+import com.mulligan.common.cluster.PostgresClusterConnection;
+import com.mulligan.common.logging.SecureLogger;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -23,6 +26,10 @@ public final class NonceStore {
     private final Map<String, Long> seen = new ConcurrentHashMap<>();
     private final Duration ttl;
     private final AtomicLong sweepCounter = new AtomicLong();
+    private final boolean jdbcBacked;
+    private final SecureLogger log;
+    private volatile PostgresClusterConnection nonceDb;
+    private volatile boolean nonceTableReady;
 
     /** Creates a nonce store with the default {@link SecureMessage#MAX_AGE_SECONDS} TTL. */
     public NonceStore() {
@@ -37,6 +44,8 @@ public final class NonceStore {
             throw new IllegalArgumentException("TTL must be positive");
         }
         this.ttl = ttl;
+        this.jdbcBacked = "jdbc".equalsIgnoreCase(resolve("mulligan.nonce.store", "MULLIGAN_NONCE_STORE"));
+        this.log = new SecureLogger("nonce-store");
     }
 
     /**
@@ -48,6 +57,9 @@ public final class NonceStore {
     public boolean registerIfFresh(String nonce) {
         if (nonce == null || nonce.isBlank()) {
             return false;
+        }
+        if (jdbcBacked) {
+            return registerIfFreshInDatabase(nonce);
         }
         long now = Instant.now().toEpochMilli();
         // Cheap incremental sweep so the store does not need a background thread.
@@ -81,5 +93,86 @@ public final class NonceStore {
     private void sweep(long nowMillis) {
         long cutoff = nowMillis - ttl.toMillis();
         seen.entrySet().removeIf(e -> e.getValue() < cutoff);
+    }
+
+    private boolean registerIfFreshInDatabase(String nonce) {
+        try (var conn = nonceConnection()) {
+            ensureNonceTable(conn);
+            conn.setAutoCommit(false);
+            try (var delete = conn.prepareStatement(
+                    "DELETE FROM security_nonces WHERE first_seen < CURRENT_TIMESTAMP - (? * INTERVAL '1 second')")) {
+                delete.setLong(1, ttl.toSeconds());
+                delete.executeUpdate();
+            }
+            try (var insert = conn.prepareStatement(
+                    "INSERT INTO security_nonces (nonce, first_seen) VALUES (?, CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING")) {
+                insert.setString(1, nonce);
+                int inserted = insert.executeUpdate();
+                conn.commit();
+                return inserted == 1;
+            } catch (Exception e) {
+                conn.rollback();
+                if ("23505".equals(sqlState(e))) {
+                    return false;
+                }
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (Exception e) {
+            log.security("REJECT nonce-store-unavailable err=" + e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private java.sql.Connection nonceConnection() throws java.sql.SQLException {
+        if (nonceDb == null) {
+            synchronized (this) {
+                if (nonceDb == null) {
+                    nonceDb = new PostgresClusterConnection(log);
+                }
+            }
+        }
+        return nonceDb.getConnection();
+    }
+
+    private void ensureNonceTable(java.sql.Connection conn) throws java.sql.SQLException {
+        if (nonceTableReady) {
+            return;
+        }
+        synchronized (this) {
+            if (nonceTableReady) {
+                return;
+            }
+            try (var stmt = conn.createStatement()) {
+                stmt.execute("""
+                        CREATE TABLE IF NOT EXISTS security_nonces (
+                            nonce VARCHAR(128) PRIMARY KEY,
+                            first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        )
+                        """);
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_security_nonces_first_seen ON security_nonces(first_seen)");
+            }
+            nonceTableReady = true;
+        }
+    }
+
+    private String sqlState(Exception e) {
+        Throwable current = e;
+        while (current != null) {
+            if (current instanceof java.sql.SQLException sqlException) {
+                return sqlException.getSQLState();
+            }
+            current = current.getCause();
+        }
+        return "";
+    }
+
+    private static String resolve(String prop, String env) {
+        String value = System.getProperty(prop);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(env);
+        }
+        return value;
     }
 }

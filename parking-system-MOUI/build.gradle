@@ -6,15 +6,13 @@ plugins {
     id 'java-library'
     id 'application'
     id 'maven-publish'
-    id 'org.openjfx.javafxplugin' version '0.1.0' // Use the latest version
-
+    id 'org.openjfx.javafxplugin' version '0.1.0'
 }
 
 javafx {
     version = "21"
     modules = [ 'javafx.controls', 'javafx.fxml' ]
 }
-
 
 application {
     mainClass.set('com.mulligan.mo.MOUIApplication')
@@ -45,7 +43,6 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-
 }
 
 group = 'com.mulligan.mo'

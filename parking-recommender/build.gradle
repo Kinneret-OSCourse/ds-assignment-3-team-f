@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'com.mulligan.recommender'
+version = '1.0-SNAPSHOT'
+description = 'parking-recommender'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':parking-common')
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'org.slf4j:slf4j-simple:2.0.13'
+    implementation 'org.openjfx:javafx-controls:21'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass.set('com.mulligan.recommender.RecommenderServerApplication')
+}
+
+tasks.register('runCli', JavaExec) {
+    group = 'application'
+    description = 'Runs the recommender CLI.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.mulligan.recommender.cli.RecommenderCLI'
+}
+
+javafx {
+    version = '21'
+    modules = [ 'javafx.controls' ]
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+test {
+    useJUnitPlatform()
+}

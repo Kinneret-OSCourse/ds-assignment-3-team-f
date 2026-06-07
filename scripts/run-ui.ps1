@@ -70,18 +70,19 @@ $env:MULLIGAN_DB_PASSWORD = Use-Value $envFile "MULLIGAN_DB_PASSWORD" "mulligan_
 
 $env:MULLIGAN_QUEUE_HOSTS = $queueHosts
 $env:MULLIGAN_QUEUE_HOST = First-Host $queueHosts
-$env:MULLIGAN_QUEUE_PORT = Use-Value $envFile "MULLIGAN_QUEUE_PORT" "5672"
-$env:MULLIGAN_QUEUE_TLS = Use-Value $envFile "MULLIGAN_QUEUE_TLS" "false"
+$env:MULLIGAN_QUEUE_PORT = Use-Value $envFile "MULLIGAN_QUEUE_PORT" "5671"
+$env:MULLIGAN_QUEUE_TLS = Use-Value $envFile "MULLIGAN_QUEUE_TLS" "true"
 $env:MULLIGAN_HMAC_KEY = Use-Value $envFile "MULLIGAN_HMAC_KEY" "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+$env:MULLIGAN_RECOMMENDER_ENDPOINTS = Use-Value $envFile "MULLIGAN_RECOMMENDER_ENDPOINTS" "http://rec1:8081,http://rec2:8082,http://rec3:8083"
 
 if ($env:MULLIGAN_QUEUE_TLS -eq "true") {
-    $storePassword = Use-Value $envFile "MULLIGAN_TLS_STORE_PASSWORD" "changeit"
-    $trustStore = Join-Path $RepoRoot "infra\rabbitmq\certs\client_truststore.jks"
-    $keyStore = Join-Path $RepoRoot "infra\rabbitmq\certs\client_keystore.p12"
-    if (-not (Test-Path $trustStore) -or -not (Test-Path $keyStore)) {
-        throw "Missing client TLS stores. Copy infra\rabbitmq\certs from the certificate generator computer to this UI computer."
+    $storePassword = Use-Value $envFile "MULLIGAN_TLS_PASSWORD" "mulligan_tls_pw"
+    $trustStore = Join-Path $RepoRoot "infra\certs\truststore.p12"
+    if (-not (Test-Path $trustStore)) {
+        throw "Missing truststore.p12. Run scripts\generate-certs.ps1 and copy infra\certs to this computer."
     }
-    $env:JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=`"$trustStore`" -Djavax.net.ssl.trustStorePassword=$storePassword -Djavax.net.ssl.keyStore=`"$keyStore`" -Djavax.net.ssl.keyStorePassword=$storePassword -Djavax.net.ssl.keyStoreType=PKCS12"
+    $env:MULLIGAN_TLS_TRUSTSTORE = $trustStore
+    $env:MULLIGAN_TLS_TRUSTSTORE_PASSWORD = $storePassword
 }
 
 switch ($App) {
@@ -89,18 +90,24 @@ switch ($App) {
         $env:MULLIGAN_QUEUE_USER_CUSTOMER = "mulligan_customer"
         $env:MULLIGAN_QUEUE_PASSWORD = Use-Value $envFile "MULLIGAN_QUEUE_CUSTOMER_PASSWORD" ""
         $env:MULLIGAN_QUEUE_PASSWORD_CUSTOMER = $env:MULLIGAN_QUEUE_PASSWORD
+        $env:MULLIGAN_TLS_KEYSTORE = Join-Path $RepoRoot "infra\certs\client-customer.p12"
+        $env:MULLIGAN_TLS_KEYSTORE_PASSWORD = Use-Value $envFile "MULLIGAN_TLS_PASSWORD" "mulligan_tls_pw"
         $project = ":parking-system-CustomerUI"
     }
     "peo" {
         $env:MULLIGAN_QUEUE_USER_PEO = "mulligan_peo"
         $env:MULLIGAN_QUEUE_PASSWORD = Use-Value $envFile "MULLIGAN_QUEUE_PEO_PASSWORD" ""
         $env:MULLIGAN_QUEUE_PASSWORD_PEO = $env:MULLIGAN_QUEUE_PASSWORD
+        $env:MULLIGAN_TLS_KEYSTORE = Join-Path $RepoRoot "infra\certs\client-peo.p12"
+        $env:MULLIGAN_TLS_KEYSTORE_PASSWORD = Use-Value $envFile "MULLIGAN_TLS_PASSWORD" "mulligan_tls_pw"
         $project = ":parking-system-PEOUI"
     }
     "mo" {
         $env:MULLIGAN_QUEUE_USER_MO = "mulligan_mo"
         $env:MULLIGAN_QUEUE_PASSWORD = Use-Value $envFile "MULLIGAN_QUEUE_MO_PASSWORD" ""
         $env:MULLIGAN_QUEUE_PASSWORD_MO = $env:MULLIGAN_QUEUE_PASSWORD
+        $env:MULLIGAN_TLS_KEYSTORE = Join-Path $RepoRoot "infra\certs\client-mo.p12"
+        $env:MULLIGAN_TLS_KEYSTORE_PASSWORD = Use-Value $envFile "MULLIGAN_TLS_PASSWORD" "mulligan_tls_pw"
         $project = ":parking-system-MOUI"
     }
 }

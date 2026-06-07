@@ -35,6 +35,8 @@ build/
 
 # Generated local runtime material
 infra/certs/
+infra/private-ca/
+infra/rabbitmq/certs/
 **/logs/
 *.log
 parking-server/plugin/

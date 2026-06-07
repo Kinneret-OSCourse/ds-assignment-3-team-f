@@ -106,7 +106,8 @@ reconfigured).
 
 Both scripts produce, under `infra/certs/`:
 
-- `ca.pem`, `ca-key.pem` — self-signed CA used for everything below.
+- `ca.pem` — self-signed CA certificate used for trust.
+- `infra/private-ca/ca-key.pem` — CA signing key kept outside runtime mounts.
 - `server-cert.pem`, `server-key.pem` — RabbitMQ server cert, SANs
   `rabbit-1`, `rabbit-2`, `rabbit-3`, `haproxy`, `localhost`.
 - `truststore.p12` — Java PKCS12 truststore that trusts the CA above.

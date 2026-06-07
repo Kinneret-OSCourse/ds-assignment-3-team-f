@@ -4,6 +4,7 @@ import com.mulligan.model.ParkingEvent;
 import com.mulligan.model.PaymentTransaction;
 import com.mulligan.service.CustomerAuthService;
 import com.mulligan.service.ParkingService;
+import com.mulligan.service.RecommenderClient;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -61,15 +62,6 @@ class CustomerControllerTest {
     }
 
     @Test
-    void recommendParkingFormatsSuccessMessage() {
-        CustomerController controller = new CustomerController(new StubParkingService());
-
-        String result = controller.recommendParking("S003");
-
-        assertEquals("Recommended parking: S003;1", result);
-    }
-
-    @Test
     void stopParkingFormatsServiceErrors() {
         CustomerController controller = new CustomerController(new ErrorParkingService());
 
@@ -97,6 +89,19 @@ class CustomerControllerTest {
         assertEquals(18.0, total, 0.001);
     }
 
+    @Test
+    void recommendParkingFormatsConsensusResult() {
+        CustomerController controller = new CustomerController(
+                new StubParkingService(),
+                new AllowOnlyCustomerAuthService(),
+                new StubRecommenderClient()
+        );
+
+        String result = controller.recommendParking("S003");
+
+        assertEquals("Recommendation result: S003;1", result);
+    }
+
     private static class StubParkingService extends ParkingService {
         @Override
         public ParkingEvent startParking(String customerId, String vehicleNumber, String spaceId) {
@@ -119,11 +124,6 @@ class CustomerControllerTest {
         public double getTotalAmountPaid(String customerId, String vehicleNumber) {
             return 18.0;
         }
-
-        @Override
-        public String recommendParking(String spaceId) {
-            return "S003;1";
-        }
     }
 
     private static class ErrorParkingService extends ParkingService {
@@ -142,6 +142,13 @@ class CustomerControllerTest {
         @Override
         public String getAssignedVehicleNumber(String customerId) {
             return "CUST-1001".equals(customerId) ? "604-95-839" : null;
+        }
+    }
+
+    private static class StubRecommenderClient extends RecommenderClient {
+        @Override
+        public String recommend(String requestedSpace) {
+            return "S003;1";
         }
     }
 }

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("db1", "db2", "db3", "rmq1", "rmq2", "rmq3")]
+    [ValidateSet("db1", "db2", "db3", "rmq1", "rmq2", "rmq3", "rec1", "rec2", "rec3")]
     [string]$Role,
 
     [switch]$Clean

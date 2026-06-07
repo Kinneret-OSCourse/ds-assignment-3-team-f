@@ -1,29 +1,5 @@
 # Testing Plan - Assignment 3
 
-## Assignment 3 Recommender and Consensus Tests
-
-Run the focused automated tests:
-
-```bash
-./gradlew :recommender-server:test
-./gradlew :parking-system-CustomerUI:test --tests com.mulligan.customer.controller.CustomerControllerTest
-```
-
-The recommender tests cover the sample minimum-citation cases from the assignment images, including requested-space minimum, nearest lower-citation spaces, nearest ties, busy-space filtering, and the all-busy empty list case.
-
-Consensus tests cover all/majority agreement, no majority agreement, one missing recommender response, and two missing recommender responses.
-
-Manual cluster tests:
-
-1. Start the full stack with `docker compose up --build`.
-2. Run `docker compose exec customer-ui java -cp "/app/lib/*" com.mulligan.customer.cli.CustomerCLI recommend S003`.
-3. Stop one recommender with `docker compose stop recommender-2`; repeat the recommendation. A matching vote from the remaining peer still succeeds.
-4. Stop two recommenders; repeat the recommendation. The leader returns a consensus failure because the 3-node majority is unavailable.
-5. Start all recommenders with `MULLIGAN_RECOMMENDER_2_MALICIOUS=true docker compose up --build`; one malicious answer is outvoted by two honest nodes.
-6. Start all recommenders with `MULLIGAN_RECOMMENDER_2_MALICIOUS=true MULLIGAN_RECOMMENDER_3_MALICIOUS=true docker compose up --build`; two malicious answers demonstrate the required negative consensus scenario.
-
-## Assignment 2 Baseline
-
 This document maps the official Assignment 1/2 use cases and Assignment 2
 security/failover requirements to concrete test evidence. The verified Docker
 project name used during local grading rehearsal was `mulligan-a2`; omit
@@ -36,6 +12,8 @@ project name used during local grading rehearsal was `mulligan-a2`; omit
 | UT-01 | All Gradle modules | Java 21 installed | `.\gradlew.bat clean build` | Build succeeds; all JUnit tests pass | Gradle console `BUILD SUCCESSFUL` |
 | UT-02 | Security primitives | Java 21 installed | `.\gradlew.bat :parking-common:test --tests com.mulligan.common.SecurityLayerTest` | HMAC, replay, stale timestamp, invalid input tests pass | JUnit report under `parking-common/build/reports/tests/test` |
 | UT-03 | Integration tests against Docker | Docker stack running, env vars point to host ports | `.\gradlew.bat cleanTest test` | Service/controller tests pass against live DB/RabbitMQ where enabled | Gradle console |
+| UT-04 | Recommender algorithm | Java 21 installed | `.\gradlew.bat :parking-recommender:test` | Minimum citation, nearest tie, and all-busy cases pass | JUnit report |
+| UT-05 | Customer recommender path | Java 21 installed | `.\gradlew.bat :parking-system-CustomerUI:test` | Customer controller formats the consensus result safely | JUnit report |
 
 ## 2. Acceptance Tests for Use Cases
 
@@ -97,6 +75,16 @@ queue messages.
 |---|---|---|---|---|---|
 | AT-17 | MO CLI | At least one citation exists | `docker compose -p mulligan-a2 exec -T mo-ui java -cp /app/lib/* com.mulligan.mo.cli.MOCLI citations` | Lists citation ID, vehicle, space, zone, inspection time, amount | Yes |
 | AT-18 | Empty branch | No citations in a clean DB | Run citations command before citations are issued | Prints `No citations found.` | Covered by test |
+
+### SUC-8: Parking Space Recommendation
+
+| ID | Artifact tested | Preconditions | Test steps | Expected result | Passed? |
+|---|---|---|---|---|---|
+| AT-19 | Customer CLI | Three recommender nodes running | `docker compose exec customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI recommend S003` | Returns `Recommendation result:` plus agreed list or `Empty List` | Covered by controller and recommender tests |
+| AT-20 | Consensus with 1 malicious node | Recommenders running | `.\gradlew.bat :parking-recommender:runCli --args="mode http://localhost:8081 malicious"` then recommend | Honest majority still returns the two-node agreed list | Manual smoke |
+| AT-21 | Consensus with 2 malicious nodes | Recommenders running | Put two nodes in malicious mode, then recommend | No majority consensus is returned | Manual smoke |
+| AT-22 | Missing recommender | Recommenders running | Stop one recommender, then recommend | Two remaining identical votes still return a result | Manual smoke |
+| AT-23 | Two missing recommenders | Recommenders running | Stop two recommenders, then recommend | No majority consensus is returned | Manual smoke |
 
 ## 3. Cluster and Failover Tests
 
@@ -198,7 +186,7 @@ Capture screenshots or saved terminal output for:
 | Secure log | `docker compose -p mulligan-a2 exec -T parking-server tail -n 100 /var/log/mulligan/security.log` |
 | DB failover | Before/after `patronictl list` plus app flow while one node is down |
 | Rabbit failover | Before/after `cluster_status` and `list_queues`, plus PEO citation while one node is down |
-| Red-team package | Listing of `Parking-System-Red-Team-Assignment2.zip` contents |
+| Recommender consensus | Customer `recommend` output plus malicious-mode majority/no-majority demonstrations |
 
 ## 6. Live Demo Command Block
 

@@ -4,6 +4,7 @@ import com.mulligan.model.ParkingEvent;
 import com.mulligan.model.PaymentTransaction;
 import com.mulligan.service.CustomerAuthService;
 import com.mulligan.service.ParkingService;
+import com.mulligan.service.RecommenderClient;
 
 import java.util.List;
 
@@ -16,6 +17,7 @@ public class CustomerController {
 
     private final ParkingService parkingService;
     private final CustomerAuthService customerAuthService;
+    private final RecommenderClient recommenderClient;
 
     /**
      * Purpose: Dependency injection constructor for CustomerController.
@@ -24,11 +26,20 @@ public class CustomerController {
     public CustomerController(ParkingService parkingService) {
         this.parkingService = parkingService;
         this.customerAuthService = new CustomerAuthService();
+        this.recommenderClient = new RecommenderClient();
     }
 
     CustomerController(ParkingService parkingService, CustomerAuthService customerAuthService) {
         this.parkingService = parkingService;
         this.customerAuthService = customerAuthService;
+        this.recommenderClient = new RecommenderClient();
+    }
+
+    CustomerController(ParkingService parkingService, CustomerAuthService customerAuthService,
+                       RecommenderClient recommenderClient) {
+        this.parkingService = parkingService;
+        this.customerAuthService = customerAuthService;
+        this.recommenderClient = recommenderClient;
     }
 
     /**
@@ -73,20 +84,6 @@ public class CustomerController {
         } catch (IllegalArgumentException e) {
             return "Error: " + e.getMessage();
         } catch (RuntimeException e) {
-            return "Error: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Purpose: Requests a consensus-backed parking recommendation for the selected space.
-     * @param spaceId The desired parking space identifier.
-     * @return String Recommendation text or a caught exception message.
-     */
-    public String recommendParking(String spaceId) {
-        try {
-            String recommendation = parkingService.recommendParking(spaceId);
-            return "Recommended parking: " + recommendation;
-        } catch (IllegalArgumentException | IllegalStateException e) {
             return "Error: " + e.getMessage();
         }
     }
@@ -137,5 +134,23 @@ public class CustomerController {
      */
     public double getTotalAmountPaid(String customerId, String vehicleNumber) {
         return parkingService.getTotalAmountPaid(customerId, vehicleNumber);
+    }
+
+    /**
+     * Purpose: Requests a consensus-backed parking recommendation for the
+     * supplied preferred parking space.
+     *
+     * @param requestedSpace desired parking space entered by the customer
+     * @return formatted recommendation or safe error text
+     */
+    public String recommendParking(String requestedSpace) {
+        try {
+            String recommendation = recommenderClient.recommend(requestedSpace);
+            return "Recommendation result: " + recommendation;
+        } catch (IllegalArgumentException e) {
+            return "Error: " + e.getMessage();
+        } catch (RuntimeException e) {
+            return "Error: Recommender service unavailable.";
+        }
     }
 }

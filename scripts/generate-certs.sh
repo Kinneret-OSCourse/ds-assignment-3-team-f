@@ -4,7 +4,7 @@
 #
 # Produces:
 #   infra/certs/ca.pem                 - self-signed CA (also imported into truststore)
-#   infra/certs/ca-key.pem             - CA private key
+#   infra/private-ca/ca-key.pem        - CA private key (never mounted at runtime)
 #   infra/certs/server-cert.pem        - RabbitMQ server cert (SANs: rabbit-1/2/3, haproxy, localhost)
 #   infra/certs/server-key.pem         - RabbitMQ server private key
 #   infra/certs/truststore.p12         - Java PKCS12 truststore (Java clients trust ca.pem)
@@ -26,13 +26,14 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)
 OUT="$HERE/infra/certs"
+PRIVATE_OUT="$HERE/infra/private-ca"
 mkdir -p "$OUT"
+mkdir -p "$PRIVATE_OUT"
 
 PASS=${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
 
 required=(
   ca.pem
-  ca-key.pem
   server-cert.pem
   server-key.pem
   truststore.p12
@@ -68,8 +69,8 @@ require_cmd openssl
 require_cmd keytool
 
 # -------- CA --------
-openssl genrsa -out "$OUT/ca-key.pem" 4096
-openssl req -x509 -new -nodes -key "$OUT/ca-key.pem" -sha256 -days 3650 \
+openssl genrsa -out "$PRIVATE_OUT/ca-key.pem" 4096
+openssl req -x509 -new -nodes -key "$PRIVATE_OUT/ca-key.pem" -sha256 -days 3650 \
   -subj "/CN=Mulligan Dev CA" -out "$OUT/ca.pem"
 
 # -------- Server (RabbitMQ + HAProxy) --------
@@ -88,7 +89,7 @@ DNS.4 = haproxy
 DNS.5 = localhost
 EOF
 
-openssl x509 -req -in "$OUT/server.csr" -CA "$OUT/ca.pem" -CAkey "$OUT/ca-key.pem" -CAcreateserial \
+openssl x509 -req -in "$OUT/server.csr" -CA "$OUT/ca.pem" -CAkey "$PRIVATE_OUT/ca-key.pem" -CAcreateserial \
   -out "$OUT/server-cert.pem" -days 825 -sha256 -extfile "$OUT/v3.ext"
 
 # -------- Java truststore --------
@@ -106,7 +107,7 @@ extendedKeyUsage = clientAuth
 subjectAltName = DNS:mulligan_${svc}
 EOF
 
-  openssl x509 -req -in "$OUT/client-${svc}.csr" -CA "$OUT/ca.pem" -CAkey "$OUT/ca-key.pem" -CAcreateserial \
+  openssl x509 -req -in "$OUT/client-${svc}.csr" -CA "$OUT/ca.pem" -CAkey "$PRIVATE_OUT/ca-key.pem" -CAcreateserial \
     -out "$OUT/client-${svc}-cert.pem" -days 825 -sha256 -extfile "$OUT/client-${svc}.ext"
 
   openssl pkcs12 -export \
@@ -125,14 +126,8 @@ chmod 600 "$OUT"/*key*.pem || true
 chmod 644 "$OUT"/*cert*.pem "$OUT"/ca.pem || true
 
 echo "Generated TLS material in $OUT"
+echo "CA signing key kept outside runtime mounts: $PRIVATE_OUT/ca-key.pem"
 echo "  truststore password = $PASS"
 echo
-echo "To activate AMQPS:"
-echo "  docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build"
-echo
-echo "To activate mTLS (after AMQPS works):"
-echo "  1. In infra/rabbitmq/rabbitmq-tls.conf flip"
-echo "       ssl_options.verify              = verify_peer"
-echo "       ssl_options.fail_if_no_peer_cert = true"
-echo "  2. For each service container set MULLIGAN_TLS_KEYSTORE and"
-echo "     MULLIGAN_TLS_KEYSTORE_PASSWORD to the matching client-<svc>.p12 file."
+echo "To activate the hardened Assignment 3 stack:"
+echo "  docker compose up -d --build"

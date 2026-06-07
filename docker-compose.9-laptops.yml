@@ -5,6 +5,9 @@ x-cluster-hosts: &cluster_hosts
   - "rabbitmq1:${LAB_RMQ1_IP:?set LAB_RMQ1_IP}"
   - "rabbitmq2:${LAB_RMQ2_IP:?set LAB_RMQ2_IP}"
   - "rabbitmq3:${LAB_RMQ3_IP:?set LAB_RMQ3_IP}"
+  - "rec1:${LAB_REC1_IP:?set LAB_REC1_IP}"
+  - "rec2:${LAB_REC2_IP:?set LAB_REC2_IP}"
+  - "rec3:${LAB_REC3_IP:?set LAB_REC3_IP}"
 
 x-postgres-env: &postgres_env
   POSTGRESQL_POSTGRES_PASSWORD: ${MULLIGAN_DB_PASSWORD:?set MULLIGAN_DB_PASSWORD}
@@ -15,6 +18,15 @@ x-postgres-env: &postgres_env
   REPMGR_PASSWORD: ${MULLIGAN_REPMGR_PASSWORD:?set MULLIGAN_REPMGR_PASSWORD}
   REPMGR_PRIMARY_HOST: postgres-node1
   REPMGR_PARTNER_NODES: postgres-node1,postgres-node2,postgres-node3
+
+x-app-env: &app_env
+  MULLIGAN_DB_HOSTS: postgres-node1:5432,postgres-node2:5432,postgres-node3:5432
+  MULLIGAN_DB_NAME: mulligan_db
+  MULLIGAN_DB_USER: mulligan_app
+  MULLIGAN_DB_PASSWORD: ${MULLIGAN_DB_APP_PASSWORD:?set MULLIGAN_DB_APP_PASSWORD}
+  MULLIGAN_DB_TLS: ${MULLIGAN_DB_TLS:-false}
+  MULLIGAN_NONCE_STORE: jdbc
+  MULLIGAN_SECURITY_LOG: /var/log/mulligan/security.log
 
 services:
   postgres-node1:
@@ -134,9 +146,9 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -174,8 +186,8 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -213,13 +225,64 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./infra/rabbitmq/certs:/etc/rabbitmq/certs:ro
+      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/certs:/etc/rabbitmq/certs:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  rec1:
+    profiles: ["rec1"]
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    hostname: rec1
+    ports:
+      - "8081:8081"
+    extra_hosts: *cluster_hosts
+    environment:
+      <<: *app_env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec1
+      MULLIGAN_RECOMMENDER_PORT: 8081
+      MULLIGAN_RECOMMENDER_PEERS: http://rec2:8082,http://rec3:8083
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC1_MALICIOUS:-false}
+    command: ["serve", "rec1", "8081", "http://rec2:8082,http://rec3:8083", "${MULLIGAN_REC1_MALICIOUS:-false}"]
+
+  rec2:
+    profiles: ["rec2"]
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    hostname: rec2
+    ports:
+      - "8082:8082"
+    extra_hosts: *cluster_hosts
+    environment:
+      <<: *app_env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec2
+      MULLIGAN_RECOMMENDER_PORT: 8082
+      MULLIGAN_RECOMMENDER_PEERS: http://rec1:8081,http://rec3:8083
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC2_MALICIOUS:-false}
+    command: ["serve", "rec2", "8082", "http://rec1:8081,http://rec3:8083", "${MULLIGAN_REC2_MALICIOUS:-false}"]
+
+  rec3:
+    profiles: ["rec3"]
+    build:
+      context: .
+      dockerfile: parking-recommender/Dockerfile
+    hostname: rec3
+    ports:
+      - "8083:8083"
+    extra_hosts: *cluster_hosts
+    environment:
+      <<: *app_env
+      MULLIGAN_RECOMMENDER_NODE_ID: rec3
+      MULLIGAN_RECOMMENDER_PORT: 8083
+      MULLIGAN_RECOMMENDER_PEERS: http://rec1:8081,http://rec2:8082
+      MULLIGAN_RECOMMENDER_MALICIOUS: ${MULLIGAN_REC3_MALICIOUS:-false}
+    command: ["serve", "rec3", "8083", "http://rec1:8081,http://rec2:8082", "${MULLIGAN_REC3_MALICIOUS:-false}"]
 
 volumes:
   postgres_node1_data:

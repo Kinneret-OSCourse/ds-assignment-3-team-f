@@ -1,4 +1,9 @@
-# 9-Computer Classroom Runbook
+# 12-Computer Classroom Runbook
+
+Assignment 3 keeps the original 3 PostgreSQL nodes and 3 RabbitMQ nodes, adds
+3 recommender nodes (`rec1`, `rec2`, `rec3`), and keeps the 3 UI computers
+(`customer`, `peo`, `mo`). The helper script is still backward-compatible, but
+new deployments should prefer `scripts\start-12-computer-node.ps1`.
 
 This file is the exact from-zero run plan for the distributed Assignment 2
 deployment. It uses:

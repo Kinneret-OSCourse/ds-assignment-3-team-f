@@ -1,52 +1,36 @@
-﻿# Mulligan Parking System - Assignment 3
+﻿# Mulligan Parking System ג€” Assignment 2
 
 Course: Distributed Systems
 Semester: 2, 5786
-Assignment: 3 - Recommender and Consensus
 
-## Assignment 3 Additions
+## Assignment 3 Update
 
-| Student Name | Student ID | Main Task in Assignment 3 | Hours |
-| --- | --- | --- | ---: |
-| Mohammad Drwish | 319043402 | Task 5 - Blue Teaming, Defense.md, security hardening review | 12 |
-| Hady Amasha | 326347564 | Task 1 - Customer GUI/CLI recommender interaction | 10 |
-| Fares Elias | 324932474 | Task 2 - Recommender server and malicious mode | 14 |
-| Rojeh Safieh | 212793824 | Task 3/4 - Consensus protocol, Docker/Gradle/tests/docs | 14 |
+This repository now includes the recommender cluster, majority consensus
+protocol, 12-computer deployment support, and hardened RabbitMQ mTLS defaults
+required for Assignment 3.
+Assignment: 2 ג€” Distributed Data Storage + Blue Team Defenses
 
-New module: `recommender-server/`.
+## Assignment 3 Submission Scope
 
-New customer command:
+The old Round 2 exploit package and generated evidence were removed from the
+source tree. Assignment 3 keeps the blue-team fixes, implementation, deployment
+files, and design/test documentation needed to build and grade the system.
 
-```bash
-MULLIGAN_RECOMMENDER_URL=http://localhost:8081 ./gradlew :parking-system-CustomerUI:runCli --args="recommend S003"
-```
-
-Start the recommender cluster locally in three terminals:
-
-```bash
-./gradlew :recommender-server:run --args="--node-id=recommender-1 --port=8081 --peers=http://localhost:8082,http://localhost:8083"
-./gradlew :recommender-server:run --args="--node-id=recommender-2 --port=8082 --peers=http://localhost:8081,http://localhost:8083"
-./gradlew :recommender-server:run --args="--node-id=recommender-3 --port=8083 --peers=http://localhost:8081,http://localhost:8082"
-```
-
-The Docker stack now includes `recommender-1`, `recommender-2`, and `recommender-3`. Per-node malicious mode is controlled with `MULLIGAN_RECOMMENDER_1_MALICIOUS`, `MULLIGAN_RECOMMENDER_2_MALICIOUS`, and `MULLIGAN_RECOMMENDER_3_MALICIOUS`.
-
-See [CONSENSUS_PROTOCOL.md](CONSENSUS_PROTOCOL.md) for the protocol and [TESTING.md](TESTING.md) for the recommender/consensus test plan.
-
-## Assignment 2 Baseline
-
-Course: Distributed Systems
-Semester: 2, 5786
-Assignment: 2 - Distributed Data Storage + Blue Team Defenses
+| Student Name    | Student ID | Main Task in Red Teaming 2 | Hours |
+| --------------- | ---------- | -------------------------- | ----: |
+| Mohammad Drwish | 319043402  | Report assembly and evidence review | 3 |
+| Hady Amasha     | 326347564  | Target deployment and screenshot evidence | 3 |
+| Fares Elias     | 324932474  | RabbitMQ attack validation | 3 |
+| Rojeh Safieh    | 212793824  | Database/TLS attack validation | 3 |
 
 ## Team
 
 | Student Name    | Student ID | Main Task in Assignment 2 | Hours |
 | --------------- | ---------- | ------------------------- | ----: |
-| Mohammad Drwish | 319043402  | Task 5 - Blue Teaming, Defense.md, security layer (parking-common) | 12 |
-| Hady Amasha     | 326347564  | Task 1 - UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
-| Fares Elias     | 324932474  | Task 2 - RabbitMQ 3-node cluster + quorum queues | 18 |
-| Rojeh Safieh    | 212793824  | Task 3 - Patroni Postgres cluster, Task 4 - DevOps/Docker/Tests | 10 |
+| Mohammad Drwish | 319043402  | Task 5 ג€” Blue Teaming, Defense.md, security layer (parking-common) | 12 |
+| Hady Amasha     | 326347564  | Task 1 ג€” UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
+| Fares Elias     | 324932474  | Task 2 ג€” RabbitMQ 3-node cluster + quorum queues | 18 |
+| Rojeh Safieh    | 212793824  | Task 3 ג€” Patroni Postgres cluster, Task 4 ג€” DevOps/Docker/Tests | 10 |
 
 Hour estimates are pre-grading; final tally is in the team retro.
 
@@ -72,6 +56,7 @@ parking-server/         queue server (HMAC verifier + NonceStore consumer)
 parking-system-CustomerUI/  Customer JavaFX UI + CLI
 parking-system-PEOUI/       PEO JavaFX UI + CLI
 parking-system-MOUI/        MO JavaFX UI + CLI
+parking-recommender/        3-node recommender server cluster + GUI/CLI
 infra/postgres/         init.sql, full-seed.sql, cluster-bootstrap.sql
 infra/rabbitmq/         rabbitmq.conf, definitions.json, join-cluster.sh
 infra/haproxy/          haproxy.cfg
@@ -79,13 +64,10 @@ infra/certs/            (generated) TLS material for AMQPS / mTLS
 scripts/                cert generation, quorum growth, failover, security, package scripts
 ```
 
-## Documented Accounts (Red-Team Pack)
+## Documented Demo Accounts
 
-Hand these to the red team along with
-`Parking-System-Red-Team-Assignment2.zip`. Passwords follow the documented
-seed below; full hashed records are loaded by
-`infra/postgres/init.sql` so passwords are not stored in plain text in the
-database.
+The seeded demo accounts below are loaded by `infra/postgres/init.sql` with
+password hashes, so passwords are not stored in plain text in the database.
 
 | Role     | Username (`*_id`) | Password    | Notes |
 | -------- | ----------------- | ----------- | ----- |
@@ -162,7 +144,26 @@ On Windows PowerShell, use `.\scripts\generate-certs.ps1` and
 The compose file brings up etcd + 3 Patroni Postgres nodes + HAProxy + 3
 RabbitMQ nodes + parking-server + the three UI containers.
 
+## Recommender and Consensus
+
+Customer GUI and CLI support "Recommend Parking". The customer app calls one
+of the three recommender nodes; that node coordinates a strict-majority vote
+with its peers and returns the agreed list in the assignment format:
+`S003;1` or `S002;3, S004;3`.
+
+```bash
+./gradlew :parking-system-CustomerUI:runCli --args="recommend S003"
+./gradlew :parking-recommender:runCli --args="mode http://localhost:8081 malicious"
+```
+
+The protocol details are in [`CONSENSUS_DESIGN.md`](CONSENSUS_DESIGN.md).
+
 ## 9-Computer Classroom Run
+
+Assignment 3 expands this to a 12-computer run: 3 PostgreSQL nodes, 3 RabbitMQ
+nodes, 3 recommender nodes, and 3 UI machines. Use
+`.\scripts\start-12-computer-node.ps1 -Role rec1`, `rec2`, and `rec3` for the
+new recommender machines.
 
 Use [LAB_9_LAPTOPS.md](LAB_9_LAPTOPS.md) as the authoritative from-zero classroom runbook. It includes fixed IP setup, `.env` values, TLS certificate generation, firewall rules, Docker cleanup, exact commands for computers 1 through 9, and the 3-computer smoke-test mapping.
 
@@ -176,9 +177,12 @@ Short version:
 | 4 | RabbitMQ node 1 | `.\scripts\start-9-laptop-node.ps1 -Role rmq1` |
 | 5 | RabbitMQ node 2 | `.\scripts\start-9-laptop-node.ps1 -Role rmq2` |
 | 6 | RabbitMQ node 3 | `.\scripts\start-9-laptop-node.ps1 -Role rmq3` |
-| 7 | Customer UI | `.\scripts\run-ui.ps1 -App customer` |
-| 8 | PEO UI | `.\scripts\run-ui.ps1 -App peo` |
-| 9 | MO UI | `.\scripts\run-ui.ps1 -App mo` |
+| 7 | Recommender node 1 | `.\scripts\start-12-computer-node.ps1 -Role rec1` |
+| 8 | Recommender node 2 | `.\scripts\start-12-computer-node.ps1 -Role rec2` |
+| 9 | Recommender node 3 | `.\scripts\start-12-computer-node.ps1 -Role rec3` |
+| 10 | Customer UI | `.\scripts\run-ui.ps1 -App customer` |
+| 11 | PEO UI | `.\scripts\run-ui.ps1 -App peo` |
+| 12 | MO UI | `.\scripts\run-ui.ps1 -App mo` |
 
 For a 3-computer smoke test, run computer 1 as `db1 + rmq1`, computer 2 as `db2 + rmq2`, and computer 3 as `db3 + rmq3`.
 
@@ -224,48 +228,16 @@ failure.
 
 ## Documentation
 
-- [`Defense.md`](Defense.md) - Blue Team report (executive summary,
+- [`Defense.md`](Defense.md) ג€” Blue Team report (executive summary,
   vulnerability inventory, root cause, fixes, security architecture, test
   results, lessons learned).
-- [`DEPLOY.md`](DEPLOY.md) - single-machine and 3-host deployment.
-- [`LAB_9_LAPTOPS.md`](LAB_9_LAPTOPS.md) - from-zero 9-computer classroom
+- [`DEPLOY.md`](DEPLOY.md) ג€” single-machine and 3-host deployment.
+- [`LAB_9_LAPTOPS.md`](LAB_9_LAPTOPS.md) ג€” from-zero 9-computer classroom
   deployment and 3-computer smoke test.
-- [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) - Postgres schema and cluster
+- [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) ג€” Postgres schema and cluster
   topology.
-- [`QUEUE_DESIGN.md`](QUEUE_DESIGN.md) - RabbitMQ topology, quorum queues,
+- [`QUEUE_DESIGN.md`](QUEUE_DESIGN.md) ג€” RabbitMQ topology, quorum queues,
   per-service ACL.
-- [`TESTING.md`](TESTING.md) - acceptance tests, failover tests, security
+- [`TESTING.md`](TESTING.md) ג€” acceptance tests, failover tests, security
   tests.
 
-## Repository layout (Red-Team package)
-
-```
-Parking-System-Red-Team-Assignment2.zip
-|-- customer-ui-1.0.jar
-|-- peo-ui-1.0.jar
-|-- mo-ui-1.0.jar
-|-- parking-server-1.0.jar
-|-- distributions/
-|-- docker-compose.yml
-|-- docker-compose.tls.yml
-|-- infra/
-|-- scripts/
-|-- local-libs/
-|-- setup-data/
-|-- README.md
-|-- DEPLOY.md
-|-- Defense.md
-|-- DATABASE_DESIGN.md
-|-- QUEUE_DESIGN.md
-|-- TESTING.md
-`-- RED_TEAM_PACKAGE.md
-```
-
-Source code is **not** included in the red-team package, per the
-assignment's red-team package rules.
-
-Regenerate the package after a successful build:
-
-```powershell
-.\scripts\make-red-team-package.ps1
-```

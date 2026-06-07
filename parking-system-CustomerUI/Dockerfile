@@ -7,13 +7,10 @@
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
 COPY . .
-RUN chmod +x gradlew \
-    && ./gradlew --no-daemon :parking-system-CustomerUI:installDist \
-    && mkdir -p /workspace/docker-dist \
-    && cp -a /root/.mulligan-gradle-build/parking-system/parking-system-CustomerUI/install/parking-system-CustomerUI /workspace/docker-dist/parking-system-CustomerUI
+RUN chmod +x gradlew && ./gradlew --no-daemon :parking-system-CustomerUI:installDist
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /workspace/docker-dist/parking-system-CustomerUI /app/
+COPY --from=build /workspace/parking-system-CustomerUI/build/install/parking-system-CustomerUI /app/
 RUN mkdir -p /var/log/mulligan && chmod 750 /var/log/mulligan
 ENTRYPOINT ["java", "-cp", "/app/lib/*", "com.mulligan.customer.cli.CustomerCLI"]

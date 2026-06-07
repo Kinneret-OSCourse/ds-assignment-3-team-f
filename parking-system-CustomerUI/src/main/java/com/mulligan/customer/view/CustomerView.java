@@ -166,6 +166,10 @@ public class CustomerView {
         TextField parkingSpaceField = new TextField();
         parkingSpaceField.setPromptText("e.g. S001");
 
+        Label recommendSpaceLabel = new Label("Preferred Space");
+        TextField recommendSpaceField = new TextField();
+        recommendSpaceField.setPromptText("e.g. S003");
+
         GridPane formGrid = new GridPane();
         formGrid.getStyleClass().add("form-grid");
         formGrid.setHgap(18);
@@ -176,6 +180,8 @@ public class CustomerView {
         formGrid.add(vehicleNumberField, 1, 1);
         formGrid.add(parkingSpaceLabel, 2, 0);
         formGrid.add(parkingSpaceField, 2, 1);
+        formGrid.add(recommendSpaceLabel, 0, 2);
+        formGrid.add(recommendSpaceField, 0, 3);
 
         ColumnConstraints flexible = new ColumnConstraints();
         flexible.setHgrow(Priority.ALWAYS);
@@ -184,16 +190,16 @@ public class CustomerView {
 
         Button startParkingButton = new Button("Start Parking");
         startParkingButton.getStyleClass().addAll("action-button", "primary-button");
-        Button recommendParkingButton = new Button("Recommend Parking");
-        recommendParkingButton.getStyleClass().addAll("action-button", "secondary-button");
         Button stopParkingButton = new Button("Stop Parking");
         stopParkingButton.getStyleClass().addAll("action-button", "secondary-button");
         Button getEventsButton = new Button("Load Parking Events");
         getEventsButton.getStyleClass().addAll("action-button", "ghost-button");
+        Button recommendButton = new Button("Recommend Parking");
+        recommendButton.getStyleClass().addAll("action-button", "secondary-button");
         Button logoutButton = new Button("Logout");
         logoutButton.getStyleClass().addAll("action-button", "ghost-button");
 
-        HBox actions = new HBox(12, startParkingButton, recommendParkingButton, stopParkingButton, getEventsButton, logoutButton);
+        HBox actions = new HBox(12, startParkingButton, stopParkingButton, getEventsButton, recommendButton, logoutButton);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         Label formTitle = new Label("Parking Controls");
@@ -280,18 +286,6 @@ public class CustomerView {
             refreshParkingEvents(customerId, vehicleNumber, eventsTable, totalAmountLabel);
         });
 
-        recommendParkingButton.setOnAction(e -> {
-            String parkingSpaceId = parkingSpaceField.getText().trim();
-
-            if (parkingSpaceId.isEmpty()) {
-                messageArea.setText("Error: Please fill in Parking Space ID.");
-                return;
-            }
-
-            String result = customerController.recommendParking(parkingSpaceId);
-            messageArea.setText(result);
-        });
-
         stopParkingButton.setOnAction(e -> {
             String customerId = customerIdField.getText().trim();
             String vehicleNumber = vehicleNumberField.getText().trim();
@@ -323,6 +317,18 @@ public class CustomerView {
                 messageArea.setText("Parking events loaded successfully. Scroll down to review the timeline table.");
                 eventsTable.scrollTo(0);
             }
+        });
+
+        recommendButton.setOnAction(e -> {
+            String requestedSpace = recommendSpaceField.getText().trim();
+            if (requestedSpace.isEmpty()) {
+                requestedSpace = parkingSpaceField.getText().trim();
+            }
+            if (requestedSpace.isEmpty()) {
+                messageArea.setText("Error: Please enter a preferred parking space.");
+                return;
+            }
+            messageArea.setText(customerController.recommendParking(requestedSpace));
         });
 
         logoutButton.setOnAction(e -> show(stage));

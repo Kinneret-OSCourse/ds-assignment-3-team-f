@@ -19,6 +19,13 @@ PostgreSQL cluster behind HAProxy and a 3-node RabbitMQ cluster with quorum
 queues. RabbitMQ uses per-service users with least-privilege ACLs, and the
 default `guest` account is not usable by remote clients.
 
+Assignment 3 changes the default full-stack deployment from "TLS-capable" to
+"RabbitMQ mTLS by default": application clients use AMQPS on 5671, the plain
+AMQP listener is disabled, database and management host ports are bound to
+localhost in the single-machine Compose file, generated CA private keys are
+kept outside runtime certificate mounts, and queue replay nonces can be stored
+in PostgreSQL so every validator rejects the same nonce.
+
 Important TLS scope note: AMQPS one-way TLS has been verified through the
 `docker-compose.tls.yml` overlay. The default `docker-compose.yml` still keeps
 `MULLIGAN_QUEUE_TLS=false` and `MULLIGAN_DB_TLS=false` for a stable classroom
@@ -48,6 +55,8 @@ JDBC for every UI. The exact opt-in procedure for both is in `DEPLOY.md`.
 | V10 | Weak input validation | Integrity | Medium | Services mostly checked null/blank only | `InputValidator` for IDs, plates, spaces, amounts, free text | JUnit + CLI invalid-input checks |
 | V11 | Stack traces/internal errors to clients | Confidentiality | Medium | Exceptions included SQL/driver messages | `ClientErrorCodes` and server-side logging | CLI smoke outputs generic errors/usage |
 | V12 | No persistent security log | Detectability | Medium | Rejections were not auditable | `SecureLogger` writes persistent log volume | `/var/log/mulligan/security.log` |
+| V13 | Runtime CA signing key exposure | Confidentiality/Integrity | Critical | Generated `ca-key.pem` lived beside runtime certs | `generate-certs.*` stores the signing key under ignored `infra/private-ca/`; containers mount only `infra/certs/` | runtime cert mount contains no CA private key |
+| V14 | Node-local replay memory | Integrity | High | In-memory nonce cache did not synchronize across validators | `MULLIGAN_NONCE_STORE=jdbc` stores nonce claims in `security_nonces` with a primary key | duplicate nonce insert is rejected across nodes |
 
 ## 3. Fix Details
 
