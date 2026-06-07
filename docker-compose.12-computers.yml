@@ -2,9 +2,9 @@ x-cluster-hosts: &cluster_hosts
   - "postgres-node1:${LAB_DB1_IP:?set LAB_DB1_IP}"
   - "postgres-node2:${LAB_DB2_IP:?set LAB_DB2_IP}"
   - "postgres-node3:${LAB_DB3_IP:?set LAB_DB3_IP}"
-  - "rabbitmq1:${LAB_RMQ1_IP:?set LAB_RMQ1_IP}"
-  - "rabbitmq2:${LAB_RMQ2_IP:?set LAB_RMQ2_IP}"
-  - "rabbitmq3:${LAB_RMQ3_IP:?set LAB_RMQ3_IP}"
+  - "rabbit-1:${LAB_RMQ1_IP:?set LAB_RMQ1_IP}"
+  - "rabbit-2:${LAB_RMQ2_IP:?set LAB_RMQ2_IP}"
+  - "rabbit-3:${LAB_RMQ3_IP:?set LAB_RMQ3_IP}"
   - "rec1:${LAB_REC1_IP:?set LAB_REC1_IP}"
   - "rec2:${LAB_REC2_IP:?set LAB_REC2_IP}"
   - "rec3:${LAB_REC3_IP:?set LAB_REC3_IP}"
@@ -111,7 +111,7 @@ services:
   rabbitmq1:
     profiles: ["rmq1"]
     image: rabbitmq:3.13-management
-    hostname: rabbitmq1
+    hostname: rabbit-1
     ports:
       - "4369:4369"
       - "25672:25672"
@@ -120,9 +120,10 @@ services:
     extra_hosts: *cluster_hosts
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
-      RABBITMQ_NODENAME: rabbit@rabbitmq1
-      RABBITMQ_DEFAULT_USER: queue_admin
+      RABBITMQ_NODENAME: rabbit@rabbit-1
+      RABBITMQ_DEFAULT_USER: mulligan_admin
       RABBITMQ_DEFAULT_PASS: ${MULLIGAN_QUEUE_ADMIN_PASSWORD:?set MULLIGAN_QUEUE_ADMIN_PASSWORD}
+      MULLIGAN_QUEUE_SERVER_PASSWORD: ${MULLIGAN_QUEUE_SERVER_PASSWORD:-mulligan_server_pw}
       MULLIGAN_QUEUE_CUSTOMER_PASSWORD: ${MULLIGAN_QUEUE_CUSTOMER_PASSWORD:?set MULLIGAN_QUEUE_CUSTOMER_PASSWORD}
       MULLIGAN_QUEUE_PEO_PASSWORD: ${MULLIGAN_QUEUE_PEO_PASSWORD:?set MULLIGAN_QUEUE_PEO_PASSWORD}
       MULLIGAN_QUEUE_MO_PASSWORD: ${MULLIGAN_QUEUE_MO_PASSWORD:?set MULLIGAN_QUEUE_MO_PASSWORD}
@@ -133,16 +134,13 @@ services:
         rabbitmq-server &
         pid="$$!"
         until rabbitmq-diagnostics -q check_running; do sleep 2; done
-        rabbitmqctl add_user queue_admin "$${RABBITMQ_DEFAULT_PASS}" 2>/dev/null || rabbitmqctl change_password queue_admin "$${RABBITMQ_DEFAULT_PASS}"
-        rabbitmqctl set_user_tags queue_admin administrator
-        rabbitmqctl add_user customer_publisher "$${MULLIGAN_QUEUE_CUSTOMER_PASSWORD}" 2>/dev/null || rabbitmqctl change_password customer_publisher "$${MULLIGAN_QUEUE_CUSTOMER_PASSWORD}"
-        rabbitmqctl add_user peo_publisher "$${MULLIGAN_QUEUE_PEO_PASSWORD}" 2>/dev/null || rabbitmqctl change_password peo_publisher "$${MULLIGAN_QUEUE_PEO_PASSWORD}"
-        rabbitmqctl add_user mo_consumer "$${MULLIGAN_QUEUE_MO_PASSWORD}" 2>/dev/null || rabbitmqctl change_password mo_consumer "$${MULLIGAN_QUEUE_MO_PASSWORD}"
-        rabbitmqctl set_permissions -p / customer_publisher "" "mulligan\\.exchange" ""
-        rabbitmqctl set_permissions -p / peo_publisher "" "mulligan\\.exchange" ""
-        rabbitmqctl set_permissions -p / mo_consumer "" "" "Transactions|Citations"
-        rabbitmqctl clear_password guest || true
         rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+        rabbitmqctl change_password mulligan_admin "$${RABBITMQ_DEFAULT_PASS}"
+        rabbitmqctl change_password mulligan_server "$${MULLIGAN_QUEUE_SERVER_PASSWORD}"
+        rabbitmqctl change_password mulligan_customer "$${MULLIGAN_QUEUE_CUSTOMER_PASSWORD}"
+        rabbitmqctl change_password mulligan_peo "$${MULLIGAN_QUEUE_PEO_PASSWORD}"
+        rabbitmqctl change_password mulligan_mo "$${MULLIGAN_QUEUE_MO_PASSWORD}"
+        rabbitmqctl clear_password guest || true
         wait "$$pid"
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
@@ -158,7 +156,7 @@ services:
   rabbitmq2:
     profiles: ["rmq2"]
     image: rabbitmq:3.13-management
-    hostname: rabbitmq2
+    hostname: rabbit-2
     ports:
       - "4369:4369"
       - "25672:25672"
@@ -167,7 +165,7 @@ services:
     extra_hosts: *cluster_hosts
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
-      RABBITMQ_NODENAME: rabbit@rabbitmq2
+      RABBITMQ_NODENAME: rabbit@rabbit-2
     command:
       - /bin/sh
       - -ec
@@ -175,14 +173,14 @@ services:
         rabbitmq-server &
         pid="$$!"
         until rabbitmq-diagnostics -q check_running; do sleep 2; done
-        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbitmq1"; then
+        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbit-1"; then
           rabbitmqctl stop_app
           rabbitmqctl reset
-          rabbitmqctl join_cluster rabbit@rabbitmq1
+          rabbitmqctl join_cluster rabbit@rabbit-1
           rabbitmqctl start_app
         fi
-        rabbitmq-queues add_member Transactions rabbit@rabbitmq2 || true
-        rabbitmq-queues add_member Citations rabbit@rabbitmq2 || true
+        rabbitmq-queues add_member Transactions rabbit@rabbit-2 || true
+        rabbitmq-queues add_member Citations rabbit@rabbit-2 || true
         wait "$$pid"
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
@@ -197,7 +195,7 @@ services:
   rabbitmq3:
     profiles: ["rmq3"]
     image: rabbitmq:3.13-management
-    hostname: rabbitmq3
+    hostname: rabbit-3
     ports:
       - "4369:4369"
       - "25672:25672"
@@ -206,7 +204,7 @@ services:
     extra_hosts: *cluster_hosts
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
-      RABBITMQ_NODENAME: rabbit@rabbitmq3
+      RABBITMQ_NODENAME: rabbit@rabbit-3
     command:
       - /bin/sh
       - -ec
@@ -214,14 +212,14 @@ services:
         rabbitmq-server &
         pid="$$!"
         until rabbitmq-diagnostics -q check_running; do sleep 2; done
-        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbitmq1"; then
+        if ! rabbitmqctl cluster_status | grep -q "rabbit@rabbit-1"; then
           rabbitmqctl stop_app
           rabbitmqctl reset
-          rabbitmqctl join_cluster rabbit@rabbitmq1
+          rabbitmqctl join_cluster rabbit@rabbit-1
           rabbitmqctl start_app
         fi
-        rabbitmq-queues add_member Transactions rabbit@rabbitmq3 || true
-        rabbitmq-queues add_member Citations rabbit@rabbitmq3 || true
+        rabbitmq-queues add_member Transactions rabbit@rabbit-3 || true
+        rabbitmq-queues add_member Citations rabbit@rabbit-3 || true
         wait "$$pid"
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq

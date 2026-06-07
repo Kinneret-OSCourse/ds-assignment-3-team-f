@@ -1,169 +1,94 @@
-﻿# Mulligan Parking System  Assignment 3
+# Mulligan Parking System - Assignment 3
 
 Course: Distributed Systems
-Semester: 2, 5786
 
-The old Round 2 exploit package and generated evidence were removed from the
-source tree. Assignment 3 keeps the blue-team fixes, implementation, deployment
-files, and design/test documentation needed to build and grade the system
+## Scope
 
+This repository contains the Assignment 3 system:
 
-## Team
-
-| Student Name    | Student ID | Main Task in Red Teaming 2 | Hours |
-| --------------- | ---------- | -------------------------- | ----: |
-| Mohammad Drwish | 319043402  | Report assembly and evidence review | 3 |
-| Hady Amasha     | 326347564  | Target deployment and screenshot evidence | 3 |
-| Fares Elias     | 324932474  | RabbitMQ attack validation | 3 |
-| Rojeh Safieh    | 212793824  | Database/TLS attack validation | 3 |
-
-
-
-Hour estimates are pre-grading; final tally is in the team retro.
-
-## What changed since Assignment 1
-
-| Area | Assignment 1 | Assignment 2 |
-| --- | --- | --- |
-| Database | Single PostgreSQL container | 3-node Patroni cluster behind HAProxy |
-| Queue | Single RabbitMQ container, classic queues | 3-node RabbitMQ cluster, quorum queues, per-service users |
-| Transport | Plain AMQP, plain JDBC | TLS-capable, configurable per env |
-| Messages | Raw JSON | HMAC-SHA256 signed envelopes (UUID nonce + Unix timestamp) |
-| Replay protection | None | Server-side `NonceStore` (60 s TTL) |
-| Credentials | Hardcoded `mulligan:mulligan123`, `postgres:pass159357` | Env-only; per-service users with least-privilege ACLs |
-| Error responses | `RuntimeException("Database error: " + ...)` | `ClientErrorCodes` (no stack trace leaves the server) |
-| Secure log | None | Persistent append-only log via `SecureLogger` |
-| Failover | None | Multi-host JDBC URL + cluster-aware AMQP client |
+- Customer, PEO, and MO JavaFX/CLI applications.
+- PostgreSQL replicated database cluster.
+- RabbitMQ quorum queue cluster with mTLS.
+- Three recommender nodes using majority consensus.
+- A 12-computer classroom deployment runbook.
 
 ## Modules
 
-```
-parking-common/         shared security, messaging, validation, cluster helpers
-parking-server/         queue server (HMAC verifier + NonceStore consumer)
-parking-system-CustomerUI/  Customer JavaFX UI + CLI
-parking-system-PEOUI/       PEO JavaFX UI + CLI
-parking-system-MOUI/        MO JavaFX UI + CLI
-parking-recommender/        3-node recommender server cluster + GUI/CLI
-infra/postgres/         init.sql, full-seed.sql, cluster-bootstrap.sql
-infra/rabbitmq/         rabbitmq.conf, definitions.json, join-cluster.sh
-infra/haproxy/          haproxy.cfg
-infra/certs/            (generated) TLS material for AMQPS / mTLS
-scripts/                cert generation, quorum growth, failover, security, package scripts
-```
-
-## Documented Demo Accounts
-
-The seeded demo accounts below are loaded by `infra/postgres/init.sql` with
-password hashes, so passwords are not stored in plain text in the database.
-
-| Role     | Username (`*_id`) | Password    | Notes |
-| -------- | ----------------- | ----------- | ----- |
-| Customer | `CUST-1001`       | `Cust1001!` | Pre-assigned vehicle `604-95-839` |
-| PEO      | `PEO-1001`        | `Peo1001!`  | Can issue citations on any space |
-| MO       | `MO-1001`         | `Mo1001!`   | Reads `Transactions` and `Citations` queues |
-
-The Postgres-side hashes for these accounts are already in `init.sql`. RabbitMQ
-broker accounts (per-service, used by the apps themselves, not by end users):
-
-| RabbitMQ user      | Used by         | Permissions |
-| ------------------ | --------------- | ----------- |
-| `mulligan_admin`   | operators only  | full access |
-| `mulligan_server`  | parking-server  | consume Transactions+Citations, write to exchange |
-| `mulligan_customer`| Customer UI/CLI | publish to `transaction.completed` only |
-| `mulligan_peo`     | PEO UI/CLI      | publish to `citation.issued` only |
-| `mulligan_mo`      | MO UI/CLI       | consume Transactions+Citations only |
-
-Passwords are stored in environment variables (`MULLIGAN_QUEUE_*_PASSWORD`)
-- they default to development values in `docker-compose.yml`. Override them
-in production by setting the matching env or .env file.
-
-## Required environment
-
-`MULLIGAN_HMAC_KEY` must be set to a 32+ byte secret on every host that
-publishes or verifies queue messages. Generate one with:
-
-```bash
-openssl rand -hex 32
+```text
+parking-common/             shared database, messaging, TLS, validation, security
+parking-server/             queue consumer and signed-message verifier
+parking-system-CustomerUI/  customer UI and CLI
+parking-system-PEOUI/       parking enforcement officer UI and CLI
+parking-system-MOUI/        municipality officer UI and CLI
+parking-recommender/        3-node recommender and consensus service
+infra/postgres/             database schema, seed data, cluster bootstrap
+infra/rabbitmq/             RabbitMQ definitions and TLS/mTLS configs
+infra/haproxy/              HAProxy config
+scripts/                    setup, TLS, test, and deployment helpers
 ```
 
-All other variables have safe defaults in `docker-compose.yml` for local
-development.
+## Demo Accounts
 
-## Build locally
+| Role | Username | Password |
+| --- | --- | --- |
+| Customer | `CUST-1001` | `Cust1001!` |
+| PEO | `PEO-1001` | `Peo1001!` |
+| MO | `MO-1001` | `Mo1001!` |
 
-```bash
-./gradlew clean build
+## Build And Test
+
+```powershell
+.\gradlew.bat clean build --no-daemon
+docker compose config --quiet
+docker compose -f docker-compose.12-computers.yml --env-file .env.12-computers.example config --quiet
 ```
 
-Runs the JUnit security suite under `parking-common`, builds every module,
-and produces installable distributions under `<module>/build/install/`.
+## Local Docker Run
 
-## Run locally (no Docker)
+Generate TLS material once:
 
-```bash
-export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
-./gradlew :parking-server:run            &  # consumes queues
-./gradlew :parking-system-CustomerUI:run &  # JavaFX UI
-./gradlew :parking-system-PEOUI:run      &
-./gradlew :parking-system-MOUI:run       &
-./gradlew :parking-system-CustomerUI:runCli --args="start CUST-1001 604-95-839 S001"
+```powershell
+.\scripts\generate-certs.ps1
 ```
 
-A locally-running Postgres + RabbitMQ on `localhost:5432` / `localhost:5672`
-is enough for the Gradle `:run` tasks if you don't want the full Docker
-cluster.
+Start the local stack:
 
-## Run with Docker (3-node clusters)
-
-```bash
-export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
-./scripts/generate-certs.sh                # optional, for AMQPS
+```powershell
 docker compose up --build
-./scripts/grow-quorum-queues.sh
 ```
 
-On Windows PowerShell, use `.\scripts\generate-certs.ps1` and
-`.\scripts\grow-quorum-queues.ps1`. If local ports are already busy, set
-`MULLIGAN_DB_PORT`, `MULLIGAN_RABBIT_AMQP_PORT`,
-`MULLIGAN_RABBIT_MANAGEMENT_PORT`, and `MULLIGAN_HAPROXY_STATS_PORT` before
-`docker compose up`.
+The local stack includes Postgres, RabbitMQ, the queue server, all three UI
+containers, and three recommender nodes.
 
-The compose file brings up etcd + 3 Patroni Postgres nodes + HAProxy + 3
-RabbitMQ nodes + parking-server + the three UI containers.
+## Recommender Consensus
 
-## Recommender and Consensus
+The customer app supports parking recommendation. It calls one recommender
+node, and that node asks the other two nodes for their result. A recommendation
+is accepted only when a strict majority agrees.
 
-Customer GUI and CLI support "Recommend Parking". The customer app calls one
-of the three recommender nodes; that node coordinates a strict-majority vote
-with its peers and returns the agreed list in the assignment format:
-`S003;1` or `S002;3, S004;3`.
+CLI examples:
 
-```bash
-./gradlew :parking-system-CustomerUI:runCli --args="recommend S003"
-./gradlew :parking-recommender:runCli --args="mode http://localhost:8081 malicious"
+```powershell
+.\gradlew.bat :parking-system-CustomerUI:runCli --args="recommend S003" --no-daemon
+.\gradlew.bat :parking-recommender:runCli --args="mode http://localhost:8081 malicious" --no-daemon
 ```
 
-The protocol details are in [`CONSENSUS_DESIGN.md`](CONSENSUS_DESIGN.md).
+Protocol details are in [CONSENSUS_DESIGN.md](CONSENSUS_DESIGN.md).
 
-## 9-Computer Classroom Run
+## 12-Computer Classroom Run
 
-Assignment 3 expands this to a 12-computer run: 3 PostgreSQL nodes, 3 RabbitMQ
-nodes, 3 recommender nodes, and 3 UI machines. Use
-`.\scripts\start-12-computer-node.ps1 -Role rec1`, `rec2`, and `rec3` for the
-new recommender machines.
+Use [LAB_12_COMPUTERS.md](LAB_12_COMPUTERS.md) for the full classroom setup.
 
-Use [LAB_9_LAPTOPS.md](LAB_9_LAPTOPS.md) as the authoritative from-zero classroom runbook. It includes fixed IP setup, `.env` values, TLS certificate generation, firewall rules, Docker cleanup, exact commands for computers 1 through 9, and the 3-computer smoke-test mapping.
-
-Short version:
+Short role map:
 
 | Computer | Role | Command |
 | --- | --- | --- |
-| 1 | PostgreSQL node 1 | `.\scripts\start-9-laptop-node.ps1 -Role db1` |
-| 2 | PostgreSQL node 2 | `.\scripts\start-9-laptop-node.ps1 -Role db2` |
-| 3 | PostgreSQL node 3 | `.\scripts\start-9-laptop-node.ps1 -Role db3` |
-| 4 | RabbitMQ node 1 | `.\scripts\start-9-laptop-node.ps1 -Role rmq1` |
-| 5 | RabbitMQ node 2 | `.\scripts\start-9-laptop-node.ps1 -Role rmq2` |
-| 6 | RabbitMQ node 3 | `.\scripts\start-9-laptop-node.ps1 -Role rmq3` |
+| 1 | PostgreSQL node 1 | `.\scripts\start-12-computer-node.ps1 -Role db1` |
+| 2 | PostgreSQL node 2 | `.\scripts\start-12-computer-node.ps1 -Role db2` |
+| 3 | PostgreSQL node 3 | `.\scripts\start-12-computer-node.ps1 -Role db3` |
+| 4 | RabbitMQ node 1 | `.\scripts\start-12-computer-node.ps1 -Role rmq1` |
+| 5 | RabbitMQ node 2 | `.\scripts\start-12-computer-node.ps1 -Role rmq2` |
+| 6 | RabbitMQ node 3 | `.\scripts\start-12-computer-node.ps1 -Role rmq3` |
 | 7 | Recommender node 1 | `.\scripts\start-12-computer-node.ps1 -Role rec1` |
 | 8 | Recommender node 2 | `.\scripts\start-12-computer-node.ps1 -Role rec2` |
 | 9 | Recommender node 3 | `.\scripts\start-12-computer-node.ps1 -Role rec3` |
@@ -171,60 +96,19 @@ Short version:
 | 11 | PEO UI | `.\scripts\run-ui.ps1 -App peo` |
 | 12 | MO UI | `.\scripts\run-ui.ps1 -App mo` |
 
-For a 3-computer smoke test, run computer 1 as `db1 + rmq1`, computer 2 as `db2 + rmq2`, and computer 3 as `db3 + rmq3`.
+## Important Environment Files
 
-CLI access while the cluster is running:
-
-```bash
-docker compose exec customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI events CUST-1001 604-95-839
-docker compose exec peo-ui      java -cp /app/lib/* com.mulligan.peo.cli.PEOCLI check 604-95-839 S001
-docker compose exec mo-ui       java -cp /app/lib/* com.mulligan.mo.cli.MOCLI transactions
-```
-
-Management UI: `http://localhost:15672` (`mulligan_admin` / `mulligan_admin_pw`).
-HAProxy stats:  `http://localhost:7000`.
-
-## Test failover
-
-Database (kills the current Patroni leader, asserts a write through HAProxy
-still works, then restarts the killed node):
-
-```bash
-./scripts/failover-db.sh
-```
-
-RabbitMQ (stops `rabbit-2`, publishes through `rabbit-1`, restarts
-`rabbit-2`):
-
-```bash
-./scripts/failover-rabbit.sh
-```
-
-## Run security tests
-
-```bash
-./gradlew :parking-common:test --tests com.mulligan.common.SecurityLayerTest
-./scripts/security-checks.sh    # cluster-wide smoke (bad HMAC, replay, stale)
-```
-
-PowerShell equivalent: `.\scripts\security-checks.ps1`.
-
-Expected output: every test prints `PASS`, the secure log under
-`/var/log/mulligan/security.log` contains one `REJECT` line per intentional
-failure.
+- Copy `.env.12-computers.example` to `.env` before running classroom nodes.
+- Keep generated TLS files out of Git. They are ignored under `infra/certs/`
+  and `infra/private-ca/`.
+- Use the same `.env` values on all 12 computers.
 
 ## Documentation
 
-- [`Defense.md`](Defense.md) ג€” Blue Team report (executive summary,
-  vulnerability inventory, root cause, fixes, security architecture, test
-  results, lessons learned).
-- [`DEPLOY.md`](DEPLOY.md) ג€” single-machine and 3-host deployment.
-- [`LAB_9_LAPTOPS.md`](LAB_9_LAPTOPS.md) ג€” from-zero 9-computer classroom
-  deployment and 3-computer smoke test.
-- [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md) ג€” Postgres schema and cluster
-  topology.
-- [`QUEUE_DESIGN.md`](QUEUE_DESIGN.md) ג€” RabbitMQ topology, quorum queues,
-  per-service ACL.
-- [`TESTING.md`](TESTING.md) ג€” acceptance tests, failover tests, security
-  tests.
-
+- [CONSENSUS_DESIGN.md](CONSENSUS_DESIGN.md)
+- [LAB_12_COMPUTERS.md](LAB_12_COMPUTERS.md)
+- [DATABASE_DESIGN.md](DATABASE_DESIGN.md)
+- [QUEUE_DESIGN.md](QUEUE_DESIGN.md)
+- [DEPLOY.md](DEPLOY.md)
+- [Defense.md](Defense.md)
+- [TESTING.md](TESTING.md)

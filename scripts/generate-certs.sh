@@ -5,7 +5,7 @@
 # Produces:
 #   infra/certs/ca.pem                 - self-signed CA (also imported into truststore)
 #   infra/private-ca/ca-key.pem        - CA private key (never mounted at runtime)
-#   infra/certs/server-cert.pem        - RabbitMQ server cert (SANs: rabbit-1/2/3, haproxy, localhost)
+#   infra/certs/server-cert.pem        - RabbitMQ server cert (SANs: rabbit-1/2/3, haproxy, localhost, optional MULLIGAN_TLS_EXTRA_IPS)
 #   infra/certs/server-key.pem         - RabbitMQ server private key
 #   infra/certs/truststore.p12         - Java PKCS12 truststore (Java clients trust ca.pem)
 #
@@ -31,6 +31,7 @@ mkdir -p "$OUT"
 mkdir -p "$PRIVATE_OUT"
 
 PASS=${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
+EXTRA_IPS=${MULLIGAN_TLS_EXTRA_IPS:-}
 
 required=(
   ca.pem
@@ -88,6 +89,18 @@ DNS.3 = rabbit-3
 DNS.4 = haproxy
 DNS.5 = localhost
 EOF
+
+ip_index=1
+if [[ -n "$EXTRA_IPS" ]]; then
+  IFS=',' read -ra san_ips <<< "$EXTRA_IPS"
+  for ip in "${san_ips[@]}"; do
+    ip=$(echo "$ip" | xargs)
+    if [[ -n "$ip" ]]; then
+      echo "IP.$ip_index = $ip" >> "$OUT/v3.ext"
+      ip_index=$((ip_index + 1))
+    fi
+  done
+fi
 
 openssl x509 -req -in "$OUT/server.csr" -CA "$OUT/ca.pem" -CAkey "$PRIVATE_OUT/ca-key.pem" -CAcreateserial \
   -out "$OUT/server-cert.pem" -days 825 -sha256 -extfile "$OUT/v3.ext"

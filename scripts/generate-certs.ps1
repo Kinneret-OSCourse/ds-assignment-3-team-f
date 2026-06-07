@@ -4,15 +4,39 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($Password)) {
-    $Password = "mulligan_tls_pw"
-}
-
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $out = Join-Path $root "infra\certs"
 $privateOut = Join-Path $root "infra\private-ca"
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 New-Item -ItemType Directory -Force -Path $privateOut | Out-Null
+
+function Read-DotEnv {
+    param([string]$Path)
+    $values = @{}
+    if (-not (Test-Path $Path)) {
+        return $values
+    }
+    Get-Content $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ($line.Length -eq 0 -or $line.StartsWith("#")) {
+            return
+        }
+        $idx = $line.IndexOf("=")
+        if ($idx -le 0) {
+            return
+        }
+        $values[$line.Substring(0, $idx).Trim()] = $line.Substring($idx + 1).Trim().Trim('"').Trim("'")
+    }
+    return $values
+}
+
+$envFile = Read-DotEnv (Join-Path $root ".env")
+if ([string]::IsNullOrWhiteSpace($Password) -and $envFile.ContainsKey("MULLIGAN_TLS_PASSWORD")) {
+    $Password = $envFile["MULLIGAN_TLS_PASSWORD"]
+}
+if ([string]::IsNullOrWhiteSpace($Password)) {
+    $Password = "mulligan_tls_pw"
+}
 
 $requiredFiles = @(
     "ca.pem",
@@ -143,6 +167,18 @@ $serverReq = [Security.Cryptography.X509Certificates.CertificateRequest]::new(
 $san = [Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder]::new()
 @("rabbit-1", "rabbit-2", "rabbit-3", "haproxy", "localhost") | ForEach-Object {
     $san.AddDnsName($_)
+}
+$extraIps = $env:MULLIGAN_TLS_EXTRA_IPS
+if ([string]::IsNullOrWhiteSpace($extraIps) -and $envFile.ContainsKey("MULLIGAN_TLS_EXTRA_IPS")) {
+    $extraIps = $envFile["MULLIGAN_TLS_EXTRA_IPS"]
+}
+if (-not [string]::IsNullOrWhiteSpace($extraIps)) {
+    $extraIps.Split(",") | ForEach-Object {
+        $ip = $_.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($ip)) {
+            $san.AddIpAddress([Net.IPAddress]::Parse($ip))
+        }
+    }
 }
 $serverReq.CertificateExtensions.Add($san.Build())
 $serverReq.CertificateExtensions.Add(

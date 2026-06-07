@@ -1,4 +1,4 @@
-# Defense Report - Mulligan Parking System (Assignment 2 Blue Team)
+# Defense Report - Mulligan Parking System (Assignment 3)
 
 Course: Distributed Systems, Semester 2, 5786
 Team F: Mohammad Drwish, Hady Amasha, Fares Elias, Rojeh Safieh
@@ -152,17 +152,14 @@ that still uses 5672 continues to work during the migration. Removing the
 plain listener is a one-line edit in `rabbitmq-tls.conf` (or the mTLS
 overlay's `rabbitmq-mtls.conf`).
 
-mTLS on AMQPS is shipped as an additive overlay rather than a default flip
-for the same "do not destabilise the verified stack" reason. The verified
-Assignment 2 grading path is "default compose + `docker-compose.tls.yml`";
-the mTLS path is "the same + `docker-compose.mtls.yml`". With the overlay
-applied, `rabbitmq-mtls.conf` sets `ssl_options.verify = verify_peer` and
-`ssl_options.fail_if_no_peer_cert = true`, and each of the four
+mTLS on AMQPS is part of the Assignment 3 hardened path. The default compose
+environment points application services at AMQPS on port `5671`; the classroom
+compose file mounts `rabbitmq-mtls.conf`, which sets
+`ssl_options.verify = verify_peer` and
+`ssl_options.fail_if_no_peer_cert = true`. Each of the four
 application services has `MULLIGAN_TLS_KEYSTORE` set to its matching
 `client-<svc>.p12` keystore. The Java `TlsConfig` already presents the
-client cert during the TLS handshake when those env vars are set, so no
-source changes are required to enable or disable mTLS - it is purely a
-deployment toggle.
+client cert during the TLS handshake when those env vars are set.
 
 PostgreSQL TLS is intentionally not enabled in the verified Docker stack
 because turning it on requires changes inside Spilo's Patroni bootstrap

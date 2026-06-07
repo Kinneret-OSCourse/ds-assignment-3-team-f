@@ -66,7 +66,7 @@ $env:MULLIGAN_DB_HOST = First-Host $dbHosts
 $env:MULLIGAN_DB_PORT = "5432"
 $env:MULLIGAN_DB_NAME = Use-Value $envFile "MULLIGAN_DB_NAME" "mulligan_db"
 $env:MULLIGAN_DB_USER = Use-Value $envFile "MULLIGAN_DB_USER" "mulligan_app"
-$env:MULLIGAN_DB_PASSWORD = Use-Value $envFile "MULLIGAN_DB_PASSWORD" "mulligan_app_pw"
+$env:MULLIGAN_DB_PASSWORD = Use-Value $envFile "MULLIGAN_DB_APP_PASSWORD" "mulligan_app_pw"
 
 $env:MULLIGAN_QUEUE_HOSTS = $queueHosts
 $env:MULLIGAN_QUEUE_HOST = First-Host $queueHosts

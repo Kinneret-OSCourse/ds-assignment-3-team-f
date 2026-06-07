@@ -1,9 +1,8 @@
 # Testing Plan - Assignment 3
 
-This document maps the official Assignment 1/2 use cases and Assignment 2
-security/failover requirements to concrete test evidence. The verified Docker
-project name used during local grading rehearsal was `mulligan-a2`; omit
-`-p mulligan-a2` if using the default Compose project.
+This document maps the required parking-system use cases, security checks,
+failover checks, and Assignment 3 recommender consensus behavior to concrete
+test evidence.
 
 ## 1. Automated Build and Unit Tests
 

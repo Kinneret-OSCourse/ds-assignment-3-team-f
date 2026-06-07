@@ -1,4 +1,4 @@
-# Queue Server Design — Assignment 2
+# Queue Server Design - Assignment 3
 
 ## 1. Topology
 

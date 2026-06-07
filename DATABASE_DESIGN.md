@@ -1,4 +1,4 @@
-# Database Design — Assignment 2
+# Database Design - Assignment 3
 
 ## 1. Engine and Cluster
 
