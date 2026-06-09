@@ -1,46 +1,14 @@
+# Assignment 3 computer 3: PostgreSQL node 3.
 #
-# Mulligan DB3 (patroni-3) on computer 10.0.201.22
-# Runs: patroni-3 only, connects to etcd on DB1 10.0.201.7
-#
+# Run on DB computer 3:
+#   docker compose --env-file .env -f docker-compose-db3.yml --profile db3 up -d --build
 
 services:
-  patroni-3:
-    image: ghcr.io/zalando/spilo-16:3.2-p3
-    hostname: patroni-3
-    environment:
-      ETCD3_HOSTS: '"10.0.201.7:2379"'
-      SCOPE: mulligan
-      PGNAME: patroni-3
-
-      PGUSER_SUPERUSER: postgres
-      PGPASSWORD_SUPERUSER: ${MULLIGAN_DB_SUPER_PASSWORD:-mulligan_super_pw}
-      PGUSER_ADMIN: admin
-      PGPASSWORD_ADMIN: ${MULLIGAN_DB_ADMIN_PASSWORD:-mulligan_admin_pw}
-      PGUSER_STANDBY: standby
-      PGPASSWORD_STANDBY: ${MULLIGAN_DB_STANDBY_PASSWORD:-mulligan_standby_pw}
-      PGVERSION: 16
-      ALLOW_NOSSL: "true"
-
-      SPILO_PROVIDER: local
-      POD_IP: 10.0.201.22
-      POD_NAMESPACE: default
-
-      SPILO_CONFIGURATION: |
-        postgresql:
-          listen: 0.0.0.0:5432
-          connect_address: 10.0.201.22:5432
-        restapi:
-          listen: 0.0.0.0:8008
-          connect_address: 10.0.201.22:8008
-
-    volumes:
-      - patroni3_data:/home/postgres/pgdata
-
-    ports:
-      - "0.0.0.0:5432:5432"
-      - "0.0.0.0:8008:8008"
-
-    restart: on-failure
+  postgres-node3:
+    extends:
+      file: docker-compose.12-computers.yml
+      service: postgres-node3
+    profiles: ["db3"]
 
 volumes:
-  patroni3_data:
+  postgres_node3_data:

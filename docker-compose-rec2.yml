@@ -1,0 +1,11 @@
+# Assignment 3 computer 8: recommender node 2.
+#
+# Run on recommender computer 2:
+#   docker compose --env-file .env -f docker-compose-rec2.yml --profile rec2 up -d --build
+
+services:
+  rec2:
+    extends:
+      file: docker-compose.12-computers.yml
+      service: rec2
+    profiles: ["rec2"]

@@ -142,6 +142,23 @@ Run one command on each computer:
 .\scripts\run-ui.ps1 -App mo
 ```
 
+The 9 Docker server computers also have matching wrapper compose files:
+
+```powershell
+docker compose --env-file .env -f docker-compose-db1.yml --profile db1 up -d --build
+docker compose --env-file .env -f docker-compose-db2.yml --profile db2 up -d --build
+docker compose --env-file .env -f docker-compose-db3.yml --profile db3 up -d --build
+docker compose --env-file .env -f docker-compose-rmq1.yml --profile rmq1 up -d --build
+docker compose --env-file .env -f docker-compose-rmq2.yml --profile rmq2 up -d --build
+docker compose --env-file .env -f docker-compose-rmq3.yml --profile rmq3 up -d --build
+docker compose --env-file .env -f docker-compose-rec1.yml --profile rec1 up -d --build
+docker compose --env-file .env -f docker-compose-rec2.yml --profile rec2 up -d --build
+docker compose --env-file .env -f docker-compose-rec3.yml --profile rec3 up -d --build
+```
+
+There are no compose files for computers 10-12 because Customer, PEO, and MO
+are Java UI/CLI computers, not Docker server nodes.
+
 CLI mode for the UI computers:
 
 ```powershell

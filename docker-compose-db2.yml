@@ -1,36 +1,14 @@
+# Assignment 3 computer 2: PostgreSQL node 2.
 #
-# Mulligan DB2 (patroni-2) on computer 10.0.201.26
-# Runs: patroni-2 only (connects to etcd on 10.0.201.7)
-#
-
-x-patroni-env: &patroni-env
-  ETCD3_HOSTS: '"10.0.201.7:2379"'
-  SCOPE: mulligan
-  PGUSER_SUPERUSER: postgres
-  PGPASSWORD_SUPERUSER: ${MULLIGAN_DB_SUPER_PASSWORD:-mulligan_super_pw}
-  PGUSER_ADMIN: admin
-  PGPASSWORD_ADMIN: ${MULLIGAN_DB_ADMIN_PASSWORD:-mulligan_admin_pw}
-  PGUSER_STANDBY: standby
-  PGPASSWORD_STANDBY: ${MULLIGAN_DB_STANDBY_PASSWORD:-mulligan_standby_pw}
-  PGVERSION: 16
-  ALLOW_NOSSL: "true"
+# Run on DB computer 2:
+#   docker compose --env-file .env -f docker-compose-db2.yml --profile db2 up -d --build
 
 services:
-
-  patroni-2:
-    image: ghcr.io/zalando/spilo-16:3.2-p3
-    hostname: patroni-2
-    environment:
-      <<: *patroni-env
-      PGNAME: patroni-2
-      PATRONI_POSTGRESQL_ADVERTISE_ADDR: "10.0.201.26:5432"
-      PATRONI_RESTAPI_ADVERTISE_ADDR: "10.0.201.26:8008"
-    volumes:
-      - patroni2_data:/home/postgres/pgdata
-    ports:
-      - "5432:5432"
-      - "8008:8008"
-    restart: on-failure
+  postgres-node2:
+    extends:
+      file: docker-compose.12-computers.yml
+      service: postgres-node2
+    profiles: ["db2"]
 
 volumes:
-  patroni2_data:
+  postgres_node2_data:

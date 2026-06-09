@@ -1,0 +1,14 @@
+# Assignment 3 computer 6: RabbitMQ node 3.
+#
+# Run on RabbitMQ computer 3:
+#   docker compose --env-file .env -f docker-compose-rmq3.yml --profile rmq3 up -d --build
+
+services:
+  rabbitmq3:
+    extends:
+      file: docker-compose.12-computers.yml
+      service: rabbitmq3
+    profiles: ["rmq3"]
+
+volumes:
+  rabbitmq3_data:
