@@ -122,24 +122,19 @@ docker compose -p mulligan-a2 exec -T rabbit-1 rabbitmqctl list_queues name type
 | SEC-05 | No stack traces to clients | Stack running | Invalid CLI commands and transient DB failure checks | No Java stack trace or SQL driver text in CLI output | Yes |
 | SEC-06 | RabbitMQ guest blocked | Stack running | `docker compose -p mulligan-a2 exec -T rabbit-1 rabbitmqctl authenticate_user guest guest` | Authentication fails | Yes |
 | SEC-07 | Least privilege users | Stack running | `rabbitmqctl list_permissions -p /` | Customer/PEO publish only; MO read only; server scoped to queues/exchange | Yes |
-| SEC-08 | AMQPS one-way TLS active | Stack started with `-f docker-compose.tls.yml` | `docker compose -p mulligan-a2 exec -T rabbit-1 rabbitmq-diagnostics listeners` | Listener `amqp/ssl 5671` is reported alongside `amqp 5672`; the four app services log `AMQP factory built tls=true` | Yes (opt-in via overlay) |
-| SEC-09 | mTLS rejects clients without cert | Stack started with the mTLS overlay (`-f docker-compose.yml -f docker-compose.tls.yml -f docker-compose.mtls.yml`) | `docker compose -p mulligan-a2 exec -T rabbit-1 openssl s_client -connect rabbit-1:5671 -CAfile /etc/rabbitmq/certs/ca.pem </dev/null` | Handshake fails with `tlsv13 alert certificate required` or `peer did not return a certificate`; rabbit-1 logs the rejection | Configurable, OFF in verified stack |
-| SEC-10 | mTLS accepts clients with the right cert | Same overlay | Same `openssl s_client` command plus `-cert /etc/rabbitmq/certs/client-server-cert.pem -key /etc/rabbitmq/certs/client-server-key.pem` | Handshake succeeds, `Verify return code: 0 (ok)`; the four app services still publish and consume after the overlay restart | Configurable, OFF in verified stack |
+| SEC-08 | AMQPS/mTLS active | Default compose stack running | `docker compose -p mulligan-a2 exec -T rabbit-1 rabbitmq-diagnostics listeners` | Listener `amqp/ssl 5671` is reported; no plain AMQP `5672`; app services log `AMQP factory built tls=true` | Yes |
+| SEC-09 | mTLS rejects clients without cert | Default compose stack running | `docker compose -p mulligan-a2 exec -T rabbit-1 openssl s_client -connect rabbit-1:5671 -CAfile /etc/rabbitmq/certs/ca.pem </dev/null` | Handshake fails with `tlsv13 alert certificate required` or `peer did not return a certificate`; rabbit-1 logs the rejection | Yes |
+| SEC-10 | mTLS accepts clients with the right cert | Default compose stack running | Same `openssl s_client` command plus `-cert /etc/rabbitmq/certs/client-server-cert.pem -key /etc/rabbitmq/certs/client-server-key.pem` | Handshake succeeds, `Verify return code: 0 (ok)`; the four app services still publish and consume | Yes |
 
-### Optional: AMQPS + mTLS verification (additive overlay)
+### AMQPS + mTLS verification
 
-mTLS is shipped as an additive overlay; the default verified path (plain
-AMQP) and the one-way TLS path (`-f docker-compose.tls.yml`) are unchanged.
-The mTLS path requires the cert generator to have produced
+The default compose stack requires the cert generator to have produced
 `client-<svc>.p12` keystores, which both `generate-certs.sh` and
 `generate-certs.ps1` do automatically.
 
 ```powershell
 .\scripts\generate-certs.ps1
-docker compose -p mulligan-a2 `
-  -f docker-compose.yml `
-  -f docker-compose.tls.yml `
-  -f docker-compose.mtls.yml up -d --build
+docker compose -p mulligan-a2 up -d --build
 .\scripts\grow-quorum-queues.ps1 -Project mulligan-a2
 
 # Listener verification
@@ -156,14 +151,6 @@ docker compose -p mulligan-a2 exec -T rabbit-1 sh -c "openssl s_client -connect 
 # App-level proof that the four services successfully present their client certs:
 docker compose -p mulligan-a2 logs parking-server | Select-String "AMQP factory built tls=true"
 .\scripts\security-checks.ps1 -Project mulligan-a2
-```
-
-Rollback to the verified one-way TLS path is a single flag removal:
-
-```powershell
-docker compose -p mulligan-a2 `
-  -f docker-compose.yml `
-  -f docker-compose.tls.yml up -d --build
 ```
 
 ## 5. Proof Checklist for Submission / Demo

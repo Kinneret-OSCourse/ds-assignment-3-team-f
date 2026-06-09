@@ -26,12 +26,14 @@ localhost in the single-machine Compose file, generated CA private keys are
 kept outside runtime certificate mounts, and queue replay nonces can be stored
 in PostgreSQL so every validator rejects the same nonce.
 
-Important TLS scope note: the default `docker-compose.yml` now uses RabbitMQ
-mTLS for application messaging. RabbitMQ mounts `rabbitmq-mtls.conf`, disables
-the plain AMQP listener, exposes AMQPS on `127.0.0.1:5671`, and gives each
-application service its matching client keystore. The older TLS overlays remain
-as compatibility helpers, but the recommended grading path is the hardened
-default compose file. `docker-compose.mtls.yml` is retained only as a compatibility overlay for older one-way TLS runs. **PostgreSQL listener-side TLS remains documented-only**: the Java client is wired for `&ssl=true&sslmode=require`, but Spilo/Patroni and HAProxy need coordinated listener changes before that flag can be enabled without breaking JDBC. The exact opt-in procedure is in `DEPLOY.md`.
+Important TLS scope note: the default `docker-compose.yml` uses RabbitMQ mTLS
+for application messaging. RabbitMQ mounts `rabbitmq-mtls.conf`, disables the
+plain AMQP listener, exposes AMQPS on `127.0.0.1:5671`, and gives each
+application service its matching client keystore. **PostgreSQL listener-side
+TLS remains documented-only**: the Java client is wired for
+`&ssl=true&sslmode=require`, but Spilo/Patroni and HAProxy need coordinated
+listener changes before that flag can be enabled without breaking JDBC. The
+exact opt-in procedure is in `DEPLOY.md`.
 
 ## 2. Vulnerability Inventory
 

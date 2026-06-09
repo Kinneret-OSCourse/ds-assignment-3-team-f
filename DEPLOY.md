@@ -114,16 +114,16 @@ Both scripts produce, under `infra/certs/`:
   `rabbit-1`, `rabbit-2`, `rabbit-3`, `haproxy`, `localhost`.
 - `truststore.p12` — Java PKCS12 truststore that trusts the CA above.
 - `client-customer.p12`, `client-peo.p12`, `client-mo.p12`,
-  `client-server.p12` — per-service mTLS keystores. Off by default; used
-  when you choose to enable mTLS (see Step 3).
+  `client-server.p12` — per-service mTLS keystores used by the default
+  hardened compose stack.
 
 Password (override with `MULLIGAN_TLS_PASSWORD` env): `mulligan_tls_pw`.
 
-### Step 2 — bring the stack up with the AMQPS overlay (one-way TLS)
+### Step 2 — bring the hardened stack up
 
 ```bash
 export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
-docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+docker compose up -d --build
 ./scripts/grow-quorum-queues.sh
 ```
 
@@ -131,111 +131,40 @@ PowerShell:
 
 ```powershell
 $env:MULLIGAN_HMAC_KEY='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+docker compose up -d --build
 .\scripts\grow-quorum-queues.ps1
 ```
 
-What the overlay changes:
+The default compose file mounts `rabbitmq-mtls.conf`, exposes AMQPS on `5671`,
+does not expose plain AMQP `5672`, and gives each application service its
+matching client certificate.
 
-- Each `rabbit-*` container mounts `rabbitmq-tls.conf` (instead of the
-  plain `rabbitmq.conf`) and the `infra/certs/` directory at
-  `/etc/rabbitmq/certs/`.
-- Port `5671` is exposed on the host. Plain AMQP on `5672` is disabled by `rabbitmq-tls.conf` and `rabbitmq-mtls.conf`.
-- The four application services (`parking-server`, `customer-ui`,
-  `peo-ui`, `mo-ui`) get `MULLIGAN_QUEUE_TLS=true`,
-  `MULLIGAN_QUEUE_HOSTS=rabbit-1:5671,rabbit-2:5671,rabbit-3:5671`,
-  `MULLIGAN_TLS_TRUSTSTORE=/etc/mulligan/certs/truststore.p12`, and the
-  matching truststore password.
-
-Verify the TLS listener and the client connection:
+Verify the mTLS listener and the client connection:
 
 ```bash
-docker compose -p mulligan-a2 exec rabbit-1 rabbitmq-diagnostics listeners
+docker compose exec rabbit-1 rabbitmq-diagnostics listeners
 # Expected: amqp/ssl 5671 + http 15672; no amqp 5672 listener
-docker compose -p mulligan-a2 logs parking-server | grep "AMQP factory built tls=true"
-docker compose -p mulligan-a2 exec parking-server tail /var/log/mulligan/security.log
-```
-
-### Step 3 — activate mTLS (optional, after Step 2 works)
-
-mTLS is shipped as an additive overlay (`docker-compose.mtls.yml`) that is
-layered on top of the one-way TLS overlay. The mTLS overlay does two things:
-
-1. Mounts `infra/rabbitmq/rabbitmq-mtls.conf` into each `rabbit-*` container
-   instead of `rabbitmq-tls.conf`. The mTLS conf flips:
-
-   ```
-   ssl_options.verify              = verify_peer
-   ssl_options.fail_if_no_peer_cert = true
-   ```
-
-2. Sets `MULLIGAN_TLS_KEYSTORE` and `MULLIGAN_TLS_KEYSTORE_PASSWORD` per
-   application service so each container presents its own client cert
-   (`client-customer.p12`, `client-peo.p12`, `client-mo.p12`,
-   `client-server.p12`). The Java `TlsConfig` class already reads these env
-   vars and wires the keystore into the SSL context automatically.
-
-Run it like this:
-
-```bash
-./scripts/generate-certs.sh
-docker compose -p mulligan-a2 \
-  -f docker-compose.yml \
-  -f docker-compose.tls.yml \
-  -f docker-compose.mtls.yml up -d --build
-./scripts/grow-quorum-queues.sh -Project mulligan-a2
-```
-
-PowerShell:
-
-```powershell
-.\scripts\generate-certs.ps1
-docker compose -p mulligan-a2 `
-  -f docker-compose.yml `
-  -f docker-compose.tls.yml `
-  -f docker-compose.mtls.yml up -d --build
-.\scripts\grow-quorum-queues.ps1 -Project mulligan-a2
+docker compose logs parking-server | grep "AMQP factory built tls=true"
+docker compose exec parking-server tail /var/log/mulligan/security.log
 ```
 
 Verify the mTLS handshake actually requires a client cert:
 
 ```bash
-# Should succeed — service has its keystore mounted by the overlay.
-docker compose -p mulligan-a2 logs parking-server | grep "AMQP factory built tls=true"
+# Should succeed: service containers have client keystores mounted.
+docker compose logs parking-server | grep "AMQP factory built tls=true"
 
 # Should fail at the TLS handshake (no client cert presented):
-docker compose -p mulligan-a2 exec rabbit-1 openssl s_client -connect rabbit-1:5671 -CAfile /etc/rabbitmq/certs/ca.pem </dev/null
+docker compose exec rabbit-1 openssl s_client -connect rabbit-1:5671 -CAfile /etc/rabbitmq/certs/ca.pem </dev/null
 # Look for "alert handshake failure" or "tlsv13 alert certificate required" in the output.
 
 # Should succeed (client presents its cert):
-docker compose -p mulligan-a2 exec rabbit-1 openssl s_client -connect rabbit-1:5671 \
+docker compose exec rabbit-1 openssl s_client -connect rabbit-1:5671 \
   -CAfile /etc/rabbitmq/certs/ca.pem \
   -cert /etc/rabbitmq/certs/client-server-cert.pem \
   -key /etc/rabbitmq/certs/client-server-key.pem </dev/null
 # Look for "Verify return code: 0 (ok)" near the bottom.
 ```
-
-Rollback to one-way TLS is a single flag removal:
-
-```bash
-docker compose -p mulligan-a2 \
-  -f docker-compose.yml \
-  -f docker-compose.tls.yml up -d --build
-```
-
-Rollback to one-way TLS is removing only the mTLS overlay. The recommended
-default compose path keeps AMQPS/mTLS enabled.
-
-#### Why the mTLS overlay is still kept
-
-The default compose file now runs RabbitMQ with mTLS. The separate
-`docker-compose.tls.yml` and `docker-compose.mtls.yml` files remain for
-compatibility with older one-way TLS verification paths. Keeping the overlay
-files means:
-
-* Reviewers can re-run the exact verified one-way TLS path with no change.
-* mTLS is one extra `-f` away — no source edits needed.
-* Rollback is a flag removal, not a `git revert`.
 
 ### What is NOT enabled in this revision
 
@@ -349,16 +278,6 @@ depends on the Spilo image revision honouring the SSL env vars on bootstrap;
 when that is not the case the cert files have to be templated into
 `postgresql.conf` directly, which is invasive enough to warrant its own
 verification cycle.
-
-### Rolling back to one-way TLS
-
-```bash
-docker compose -p mulligan-a2 down
-docker compose -p mulligan-a2 -f docker-compose.yml -f docker-compose.tls.yml up -d --build
-```
-
-This keeps AMQPS enabled but removes the client-certificate requirement used
-by the default hardened mTLS path.
 
 ## Common operations
 
