@@ -1,5 +1,8 @@
-# TLS overlay - merge with docker-compose.yml to activate AMQPS on port 5671
-# and have all four application services connect over TLS.
+# TLS compatibility overlay.
+#
+# The recommended Assignment 3 `docker-compose.yml` already uses RabbitMQ
+# AMQPS/mTLS on port 5671. Keep this overlay for older one-way TLS runs or
+# demonstrations where client certificates are intentionally not required.
 #
 #   ./scripts/generate-certs.sh           # one time
 #   export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
@@ -14,9 +17,8 @@
 #   * The cert directory is mounted into each rabbit-* service at
 #     /etc/rabbitmq/certs so the broker can read server-cert.pem and
 #     server-key.pem.
-#   * Port 5671 is exposed on rabbit-1 for external AMQPS clients. The plain
-#     5672 listener stays open inside the TLS conf so a rollback by removing
-#     `-f docker-compose.tls.yml` continues to work without changing tests.
+#   * Port 5671 is exposed on rabbit-1 for external AMQPS clients. Plain AMQP
+#     on 5672 is disabled by the RabbitMQ TLS configs.
 #   * The four application services get MULLIGAN_QUEUE_TLS=true, the AMQPS
 #     host list, and the truststore env. The TlsConfig class wires the
 #     SSLContext into the AMQP factory automatically.
@@ -27,10 +29,8 @@
 #     TCP mode. MULLIGAN_DB_TLS is supported by the Java client but kept
 #     `false` because activating it without the listener change would break
 #     JDBC.
-#   * mTLS - rabbitmq-tls.conf defaults to `ssl_options.verify = verify_none`.
-#     Flip to `verify_peer` + `fail_if_no_peer_cert = true` and set
-#     MULLIGAN_TLS_KEYSTORE per service (using the client-<svc>.p12 files the
-#     cert script now produces).
+#   * mTLS - the base compose file and `docker-compose.mtls.yml` use
+#     `rabbitmq-mtls.conf` plus per-service `client-<svc>.p12` keystores.
 
 services:
 

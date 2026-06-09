@@ -127,6 +127,7 @@ class ParkingServiceTest {
 
     @Test
     void issueCitationPublishesCitationMessageToQueue() throws Exception {
+        assumeTrue(assignmentQueueAvailable(), "Assignment RabbitMQ is not reachable with test credentials");
         String plateNumber = createVehicle("TPQ");
         purgeCitationsQueue();
 
@@ -268,6 +269,14 @@ class ParkingServiceTest {
 
     private boolean assignmentDatabaseAvailable() {
         try (Connection ignored = DatabaseConnection.getConnection()) {
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean assignmentQueueAvailable() {
+        try (com.rabbitmq.client.Connection ignored = serverQueueFactory().newConnection()) {
             return true;
         } catch (Exception ignored) {
             return false;

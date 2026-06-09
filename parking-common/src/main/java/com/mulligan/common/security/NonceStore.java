@@ -144,6 +144,14 @@ public final class NonceStore {
             if (nonceTableReady) {
                 return;
             }
+            try (var check = conn.prepareStatement("SELECT to_regclass('public.security_nonces')")) {
+                try (var rs = check.executeQuery()) {
+                    if (rs.next() && rs.getString(1) != null) {
+                        nonceTableReady = true;
+                        return;
+                    }
+                }
+            }
             try (var stmt = conn.createStatement()) {
                 stmt.execute("""
                         CREATE TABLE IF NOT EXISTS security_nonces (

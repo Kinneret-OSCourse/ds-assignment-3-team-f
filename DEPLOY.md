@@ -1,4 +1,4 @@
-# Deployment Guide - Assignment 3
+﻿# Deployment Guide - Assignment 3
 
 ## Prerequisites
 
@@ -18,17 +18,19 @@
 | `MULLIGAN_DB_USER` / `MULLIGAN_DB_PASSWORD` | no | `mulligan_app` / `mulligan_app_pw` | App role |
 | `MULLIGAN_DB_TLS` | no | `false` | Client-side JDBC TLS flag; requires DB/HAProxy TLS listener configuration |
 | `MULLIGAN_QUEUE_HOSTS` | no | the 3 rabbit nodes | Comma-separated list |
-| `MULLIGAN_QUEUE_TLS` | no | `false` | Client-side AMQPS flag; requires RabbitMQ TLS listener configuration |
+| `MULLIGAN_QUEUE_TLS` | no | `true` | Client-side AMQPS flag; default compose uses RabbitMQ mTLS on 5671 |
 | `MULLIGAN_QUEUE_USER_{CUSTOMER,PEO,MO,SERVER}` | no | per-service users | RabbitMQ login |
 | `MULLIGAN_QUEUE_PASSWORD_{CUSTOMER,PEO,MO,SERVER}` | no | matching dev passwords | RabbitMQ password |
-| `MULLIGAN_TLS_TRUSTSTORE` / `MULLIGAN_TLS_TRUSTSTORE_PASSWORD` | only with `MULLIGAN_QUEUE_TLS=true` | — | AMQPS trust material |
+| `MULLIGAN_TLS_TRUSTSTORE` / `MULLIGAN_TLS_TRUSTSTORE_PASSWORD` | with AMQPS | `/etc/mulligan/certs/truststore.p12` / `mulligan_tls_pw` | AMQPS trust material |
+| `MULLIGAN_TLS_KEYSTORE` / `MULLIGAN_TLS_KEYSTORE_PASSWORD` | with mTLS | per-service `client-<svc>.p12` / `mulligan_tls_pw` | AMQPS client certificate material |
 | `MULLIGAN_SECURITY_LOG` | no | `logs/security.log` | Append-only audit log |
 
 ## Single-machine deployment (recommended for grading)
 
 ```bash
 git clone <repository>
-cd ds-assignment-1-team-f-master
+cd ds-assignment-3-team-f
+./scripts/generate-certs.sh
 export MULLIGAN_HMAC_KEY=$(openssl rand -hex 32)
 docker compose up --build
 ./scripts/grow-quorum-queues.sh
@@ -83,18 +85,18 @@ Open the inbound firewall ports on the server PC:
 
 ```powershell
 New-NetFirewallRule -DisplayName "Mulligan PostgreSQL (HAProxy)" -Direction Inbound -Protocol TCP -LocalPort 5432 -Action Allow
-New-NetFirewallRule -DisplayName "Mulligan RabbitMQ" -Direction Inbound -Protocol TCP -LocalPort 5672 -Action Allow
+New-NetFirewallRule -DisplayName "Mulligan RabbitMQ AMQPS" -Direction Inbound -Protocol TCP -LocalPort 5671 -Action Allow
 New-NetFirewallRule -DisplayName "Mulligan RabbitMQ Management" -Direction Inbound -Protocol TCP -LocalPort 15672 -Action Allow
 ```
 
 ## TLS deployment
 
-The default `docker-compose.yml` runs plain AMQP/JDBC inside the Docker
-network and protects queue integrity with HMAC, nonce replay protection, and
-least-privilege RabbitMQ users. AMQPS can be activated as an additive
-overlay; PostgreSQL TLS is implemented client-side only and is NOT enabled in
-the verified stack (the Patroni/HAProxy listeners would also need to be
-reconfigured).
+The default `docker-compose.yml` runs RabbitMQ application traffic over
+AMQPS/mTLS on port `5671`, disables the plain AMQP listener, and still protects
+queue integrity with HMAC, nonce replay protection, and least-privilege
+RabbitMQ users. PostgreSQL TLS is implemented client-side only and is NOT
+enabled in the verified stack; the Patroni and HAProxy listeners must be
+reconfigured before `MULLIGAN_DB_TLS=true` is safe to use.
 
 ### Step 1 — generate certificates and per-service mTLS keystores
 
@@ -138,8 +140,7 @@ What the overlay changes:
 - Each `rabbit-*` container mounts `rabbitmq-tls.conf` (instead of the
   plain `rabbitmq.conf`) and the `infra/certs/` directory at
   `/etc/rabbitmq/certs/`.
-- Port `5671` is exposed on the host; port `5672` remains exposed so the
-  non-TLS clients keep working during the migration.
+- Port `5671` is exposed on the host. Plain AMQP on `5672` is disabled by `rabbitmq-tls.conf` and `rabbitmq-mtls.conf`.
 - The four application services (`parking-server`, `customer-ui`,
   `peo-ui`, `mo-ui`) get `MULLIGAN_QUEUE_TLS=true`,
   `MULLIGAN_QUEUE_HOSTS=rabbit-1:5671,rabbit-2:5671,rabbit-3:5671`,
@@ -150,7 +151,7 @@ Verify the TLS listener and the client connection:
 
 ```bash
 docker compose -p mulligan-a2 exec rabbit-1 rabbitmq-diagnostics listeners
-# Expected: amqp/ssl 5671 + amqp 5672 + http 15672
+# Expected: amqp/ssl 5671 + http 15672; no amqp 5672 listener
 docker compose -p mulligan-a2 logs parking-server | grep "AMQP factory built tls=true"
 docker compose -p mulligan-a2 exec parking-server tail /var/log/mulligan/security.log
 ```
@@ -222,15 +223,15 @@ docker compose -p mulligan-a2 \
   -f docker-compose.tls.yml up -d --build
 ```
 
-Rollback to plain AMQP is removing the TLS overlay as well (see the "Rolling
-back to plain AMQP" section below).
+Rollback to one-way TLS is removing only the mTLS overlay. The recommended
+default compose path keeps AMQPS/mTLS enabled.
 
-#### Why mTLS ships as an overlay rather than as a default flip
+#### Why the mTLS overlay is still kept
 
-The verified passing stack is "default compose + `docker-compose.tls.yml`".
-Flipping mTLS on inside `rabbitmq-tls.conf` would mean the verification
-commands stop being equivalent to what the team validated. Keeping mTLS in
-its own overlay file means:
+The default compose file now runs RabbitMQ with mTLS. The separate
+`docker-compose.tls.yml` and `docker-compose.mtls.yml` files remain for
+compatibility with older one-way TLS verification paths. Keeping the overlay
+files means:
 
 * Reviewers can re-run the exact verified one-way TLS path with no change.
 * mTLS is one extra `-f` away — no source edits needed.
@@ -260,10 +261,10 @@ its own overlay file means:
   those steps would break JDBC for every UI immediately — which would
   destabilise the verified stack. The optional enablement procedure is
   documented in the next section.
-- **Erlang inter-broker TLS** for `rabbit-1 ↔ rabbit-2 ↔ rabbit-3` traffic.
-  That is configured separately in `rabbitmq.conf` under
-  `cluster_formation.peer_discovery_*` and is out of scope for Assignment
-  2.
+- **Erlang inter-broker TLS** for `rabbit-1`, `rabbit-2`, and `rabbit-3`
+  traffic. The current hardening keeps distribution ports off the host network
+  and rotates the cookie through environment configuration; enabling TLS for
+  Erlang distribution is a separate RabbitMQ runtime change.
 
 ### Optional: PostgreSQL listener-side TLS (NOT in the verified stack)
 
@@ -349,15 +350,15 @@ when that is not the case the cert files have to be templated into
 `postgresql.conf` directly, which is invasive enough to warrant its own
 verification cycle.
 
-### Rolling back to plain AMQP
+### Rolling back to one-way TLS
 
 ```bash
 docker compose -p mulligan-a2 down
-docker compose -p mulligan-a2 up -d --build       # no -f docker-compose.tls.yml
+docker compose -p mulligan-a2 -f docker-compose.yml -f docker-compose.tls.yml up -d --build
 ```
 
-The plain stack picks up exactly the configuration that was passing all
-verifications before TLS was activated.
+This keeps AMQPS enabled but removes the client-certificate requirement used
+by the default hardened mTLS path.
 
 ## Common operations
 

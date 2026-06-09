@@ -17,12 +17,10 @@
 #                  -f docker-compose.yml \
 #                  -f docker-compose.tls.yml up -d --build
 #
-# Why this is an additive overlay rather than a flip in the existing TLS overlay:
-#   * The verified passing stack is "default compose + docker-compose.tls.yml".
-#     Leaving that overlay untouched means the verification commands the team
-#     uses for grading produce the same result they did before.
-#   * mTLS depends on cert material that the operator may or may not have
-#     mounted. Keeping it in its own file makes the dependency explicit.
+# Why this overlay is still useful:
+#   * The recommended Assignment 3 compose file already uses RabbitMQ mTLS.
+#   * This file remains a compatibility overlay for older one-way TLS runs.
+#   * Keeping it separate makes rollback demonstrations explicit.
 #
 # What changes when this overlay is active:
 #   * rabbit-1/2/3 read /etc/rabbitmq/rabbitmq-mtls.conf instead of

@@ -1,4 +1,4 @@
-# Defense Report - Mulligan Parking System (Assignment 3)
+﻿# Defense Report - Mulligan Parking System (Assignment 3)
 
 Course: Distributed Systems, Semester 2, 5786
 Team F: Mohammad Drwish, Hady Amasha, Fares Elias, Rojeh Safieh
@@ -26,24 +26,18 @@ localhost in the single-machine Compose file, generated CA private keys are
 kept outside runtime certificate mounts, and queue replay nonces can be stored
 in PostgreSQL so every validator rejects the same nonce.
 
-Important TLS scope note: AMQPS one-way TLS has been verified through the
-`docker-compose.tls.yml` overlay. The default `docker-compose.yml` still keeps
-`MULLIGAN_QUEUE_TLS=false` and `MULLIGAN_DB_TLS=false` for a stable classroom
-demo path; the TLS overlay sets `MULLIGAN_QUEUE_TLS=true` and uses RabbitMQ
-port 5671. **mTLS ships as its own additive overlay
-(`docker-compose.mtls.yml`)** layered on top of the TLS overlay — flipping it
-on is a single extra `-f docker-compose.mtls.yml` flag and a one-flag
-rollback. **PostgreSQL listener-side TLS remains documented-only**: the Java
-client is wired for `&ssl=true&sslmode=require`, but Spilo/Patroni and
-HAProxy would need three coordinated config changes to terminate TLS at the
-broker side, and turning on the client flag without those changes would break
-JDBC for every UI. The exact opt-in procedure for both is in `DEPLOY.md`.
+Important TLS scope note: the default `docker-compose.yml` now uses RabbitMQ
+mTLS for application messaging. RabbitMQ mounts `rabbitmq-mtls.conf`, disables
+the plain AMQP listener, exposes AMQPS on `127.0.0.1:5671`, and gives each
+application service its matching client keystore. The older TLS overlays remain
+as compatibility helpers, but the recommended grading path is the hardened
+default compose file. `docker-compose.mtls.yml` is retained only as a compatibility overlay for older one-way TLS runs. **PostgreSQL listener-side TLS remains documented-only**: the Java client is wired for `&ssl=true&sslmode=require`, but Spilo/Patroni and HAProxy need coordinated listener changes before that flag can be enabled without breaking JDBC. The exact opt-in procedure is in `DEPLOY.md`.
 
 ## 2. Vulnerability Inventory
 
 | # | Vulnerability | CIA impact | Severity | Root cause | Fix / mitigation | Test evidence |
 |---|---|---|---|---|---|---|
-| V1 | Plain AMQP/JDBC transport | Confidentiality | High | Assignment 1 used classroom plaintext defaults | TLS-capable Java clients and cert scripts added; deployment docs now show how to enable, but default Docker stack remains plaintext | `TlsConfig`, `MulliganConnectionFactory`, `generate-certs.*`; not claimed active by default |
+| V1 | Plain AMQP/JDBC transport | Confidentiality | High | Assignment 1 used classroom plaintext defaults | RabbitMQ application traffic now uses AMQPS/mTLS by default; PostgreSQL TLS remains a documented listener-side follow-up | `TlsConfig`, `MulliganConnectionFactory`, `generate-certs.*`, `rabbitmq-mtls.conf` |
 | V2 | Forged queue messages | Integrity | Critical | Raw JSON messages had no authentication | HMAC-SHA256 envelope over nonce, timestamp, payload | `security-checks.ps1`: bad HMAC rejected |
 | V3 | Replay of valid queue messages | Integrity | High | No nonce or server-side replay memory | UUID nonce, Unix timestamp, `NonceStore` TTL | `security-checks.ps1`: replay rejected |
 | V4 | Stale delayed messages | Integrity | High | No freshness check | Reject timestamps older than 60 seconds | `security-checks.ps1`: stale timestamp rejected |
@@ -129,15 +123,13 @@ mounted at `/var/log/mulligan/security.log`.
 
 ### 3.6 TLS / mTLS Capability
 
-TLS for AMQP is **available as an opt-in overlay** and TLS for JDBC is
-**implemented in the client only**. The honest, current matrix is:
+RabbitMQ mTLS is enabled in the recommended default Compose stack. TLS for JDBC is implemented in the client only until the Patroni and HAProxy listeners are configured for TLS. The current matrix is:
 
 | Channel | TLS code | Listener config | Default in compose | How to activate |
 | --- | --- | --- | --- | --- |
-| AMQP (Customer/PEO/MO/server → RabbitMQ) | `MulliganConnectionFactory` + `TlsConfig` | `infra/rabbitmq/rabbitmq-tls.conf` (port 5671, TLS 1.2/1.3) | OFF (plain 5672) | `docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build` after `generate-certs` |
-| Inter-broker (RabbitMQ ↔ RabbitMQ) | n/a | uses the shared Erlang cookie; not TLS-encrypted | OFF | Out of scope for Assignment 2 |
-| JDBC (UIs → HAProxy → Patroni) | `PostgresClusterConnection.jdbcTlsParameters()` | not configured (HAProxy is TCP-mode, Spilo Postgres has no listener cert) | OFF (plain) | Documented opt-in procedure in `DEPLOY.md` §"Optional: PostgreSQL listener-side TLS" - requires (a) Spilo `SSL_CERTIFICATE_FILE`/`SSL_PRIVATE_KEY_FILE` env, (b) `hostssl` line in `pg_hba.conf`, (c) HAProxy `bind ssl crt` frontend, (d) flipping `MULLIGAN_DB_TLS=true`. Not enabled in the verified stack because activating step (d) without (a)-(c) would break JDBC. |
-| mTLS on AMQPS | `MULLIGAN_TLS_KEYSTORE` env supported | `infra/rabbitmq/rabbitmq-mtls.conf` (verify_peer + fail_if_no_peer_cert) loaded by `docker-compose.mtls.yml` | Configurable via additive overlay (OFF in the default verified stack, ON when `-f docker-compose.mtls.yml` is added) | `docker compose -f docker-compose.yml -f docker-compose.tls.yml -f docker-compose.mtls.yml up -d --build`. The cert generator already produces the per-service `client-<svc>.p12` keystores and the mTLS overlay mounts them and sets `MULLIGAN_TLS_KEYSTORE`. Rollback to one-way TLS is a single `-f` flag removal. |
+| AMQP (Customer/PEO/MO/server to RabbitMQ) | `MulliganConnectionFactory` + `TlsConfig` | `infra/rabbitmq/rabbitmq-mtls.conf` on port 5671, TLS 1.2/1.3, `verify_peer`, `fail_if_no_peer_cert` | ON, mTLS | Run `scripts/generate-certs.*`, set `MULLIGAN_HMAC_KEY`, then `docker compose up --build` |
+| Inter-broker RabbitMQ clustering | broker config | RabbitMQ distribution is confined to the Compose network with a rotated cookie supplied by env | Network-restricted | Keep the cookie out of committed files and do not publish distribution ports |
+| JDBC (UIs to HAProxy to Patroni) | `PostgresClusterConnection.jdbcTlsParameters()` | not configured yet; HAProxy is TCP-mode and Spilo Postgres has no listener cert | OFF, plaintext inside Compose network | Documented opt-in procedure in `DEPLOY.md` section "Optional: PostgreSQL listener-side TLS" |
 
 `scripts/generate-certs.sh` (bash) and `scripts/generate-certs.ps1`
 (PowerShell, .NET native, no openssl needed) both now produce the CA, the
@@ -146,11 +138,7 @@ the Java truststore, and four per-service mTLS keystores
 (`client-customer.p12`, `client-peo.p12`, `client-mo.p12`,
 `client-server.p12`).
 
-Activating AMQPS does not break the existing test path: the TLS-enabled
-config keeps the plain 5672 listener up so any container or operator script
-that still uses 5672 continues to work during the migration. Removing the
-plain listener is a one-line edit in `rabbitmq-tls.conf` (or the mTLS
-overlay's `rabbitmq-mtls.conf`).
+The hardened RabbitMQ configuration disables the plain `5672` listener. Any client or operator script must use AMQPS on `5671`; plaintext AMQP is treated as a failed security check rather than a migration fallback.
 
 mTLS on AMQPS is part of the Assignment 3 hardened path. The default compose
 environment points application services at AMQPS on port `5671`; the classroom
@@ -218,16 +206,16 @@ RabbitMQ/PostgreSQL cluster endpoints
 | Invalid input | CLI invalid plate/amount/usage checks | no stack trace, safe error | PASS |
 | DB failover | stop one Patroni replica/leader and retry flow after election | cluster recovers, app works | PASS |
 | Rabbit failover | stop `rabbit-2`, issue citation, restart | quorum remains online; node rejoins | PASS |
-| AMQPS listener (one-way TLS) | `docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build` after `generate-certs`; then `docker compose exec rabbit-1 rabbitmq-diagnostics listeners` | listener `amqp/ssl 5671` reported, plain 5672 still up | Implemented + opt-in; activate via overlay, then run the security-checks.ps1 over 5671 |
-| Java AMQPS client | `MULLIGAN_QUEUE_TLS=true` + truststore env (set by the overlay) | publish + consume work over 5671, `SecureLogger` records `tls=true` in the AMQP factory line | Implemented + opt-in; same overlay run |
-| mTLS on AMQPS | `docker compose -f docker-compose.yml -f docker-compose.tls.yml -f docker-compose.mtls.yml up -d --build` | a client without a cert is refused at the TLS handshake; a service container with its `client-<svc>.p12` mounted by the overlay handshakes successfully | Configurable via additive overlay (`docker-compose.mtls.yml` + `rabbitmq-mtls.conf`). OFF in the verified stack, single `-f` flag to turn on, single `-f` flag to roll back to one-way TLS. |
-| Postgres/JDBC TLS | not enabled in compose (listener not configured); `MULLIGAN_DB_TLS=true` is wired in the client | n/a in default; opt-in procedure in `DEPLOY.md` §"Optional: PostgreSQL listener-side TLS" | Client-side ready, listener side **documented-only** in this revision because Spilo bootstrap + HAProxy frontend changes are required together and were judged too risky to flip without dedicated verification of DB failover under TLS |
+| AMQPS/mTLS listener | `docker compose up -d --build` after `generate-certs`; then `docker compose exec rabbit-1 rabbitmq-diagnostics listeners` | listener `amqp/ssl 5671` reported; no plain AMQP listener | Implemented in default compose |
+| Java AMQPS client | `MULLIGAN_QUEUE_TLS=true` + truststore + per-service keystore env | publish + consume work over 5671, `SecureLogger` records `tls=true` in the AMQP factory line | Implemented in default compose |
+| mTLS client rejection | connect to 5671 without a client cert | handshake is refused; service containers with `client-<svc>.p12` connect successfully | Implemented in default compose |
+| Postgres/JDBC TLS | not enabled in compose (listener not configured); `MULLIGAN_DB_TLS=true` is wired in the client | n/a in default; opt-in procedure in `DEPLOY.md` section "Optional: PostgreSQL listener-side TLS" | Client-side ready, listener side documented-only in this revision because Spilo bootstrap + HAProxy frontend changes are required together and were judged too risky to flip without dedicated verification of DB failover under TLS |
 
 ## 6. Lessons Learned
 
-- Security claims must match the actual deployment profile. TLS is implemented
-  and documented, but it should not be described as active until the broker and
-  database listeners are explicitly configured and tested with TLS.
+- Security claims must match the actual deployment profile. RabbitMQ mTLS is
+  active in the recommended compose stack; PostgreSQL TLS should remain labeled
+  as documented-only until its listener path is configured and tested.
 - HMAC envelopes and nonce replay protection are cheap compared with trying to
   detect forged messages after they enter the system.
 - Least-privilege RabbitMQ users make red-team scope much narrower and make
