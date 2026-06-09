@@ -1,4 +1,4 @@
-# parking-server image (Assignment 2).
+# parking-server image (Assignment 3).
 #
 # Build context MUST be the repository root so the parking-common module is
 # included in the source tree.

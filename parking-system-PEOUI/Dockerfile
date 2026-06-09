@@ -1,4 +1,4 @@
-# PEO UI image (Assignment 2).
+# PEO UI image (Assignment 3).
 # Build context = repository root.
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace

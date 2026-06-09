@@ -1,4 +1,4 @@
-# MO UI image (Assignment 2).
+# MO UI image (Assignment 3).
 # Build context = repository root.
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace

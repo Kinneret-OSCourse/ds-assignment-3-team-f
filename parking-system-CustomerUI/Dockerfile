@@ -1,4 +1,4 @@
-# Customer UI image (Assignment 2).
+# Customer UI image (Assignment 3).
 #
 # Build context = repository root. CLI mode is the default entrypoint because
 # the JavaFX GUI cannot be displayed inside a headless Docker container; the

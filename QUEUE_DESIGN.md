@@ -31,13 +31,11 @@ can run against a fresh broker too.
 
 ## 2. Cluster Formation
 
-- `rabbit-1` boots normally with `management.load_definitions =
-  /etc/rabbitmq/definitions.json`.
-- `rabbit-2` and `rabbit-3` boot with `infra/rabbitmq/join-cluster.sh` as
-  their entrypoint, which polls `rabbit@rabbit-1`, stops the local app,
-  joins the cluster and starts the app again.
+- All three RabbitMQ nodes boot with `infra/rabbitmq/rabbitmq-mtls.conf`,
+  which loads `/etc/rabbitmq/definitions.json` and uses static cluster
+  formation for `rabbit@rabbit-1`, `rabbit@rabbit-2`, and `rabbit@rabbit-3`.
 - `cluster_partition_handling = pause_minority` is set in
-  `rabbitmq.conf` so a network split pauses the side without quorum
+  `rabbitmq-mtls.conf` so a network split pauses the side without quorum
   rather than diverging.
 
 ## 3. Per-Service Users (Hardened ACL)
@@ -51,7 +49,7 @@ can run against a fresh broker too.
 | `mulligan_mo`       | — | none | none | `Transactions|Citations` | n/a |
 
 The default `guest` user is restricted to loopback by
-`loopback_users.guest = true` in `rabbitmq.conf`.
+`loopback_users.guest = true` in `rabbitmq-mtls.conf`.
 
 ## 4. Message Format (HMAC envelope)
 

@@ -75,7 +75,12 @@ launch the CLI JARs directly:
 
 ```bash
 export MULLIGAN_DB_HOSTS=<server-pc>:5432
-export MULLIGAN_QUEUE_HOSTS=<server-pc>:5672
+export MULLIGAN_QUEUE_HOSTS=<server-pc>:5671
+export MULLIGAN_QUEUE_TLS=true
+export MULLIGAN_TLS_TRUSTSTORE=/path/to/infra/certs/truststore.p12
+export MULLIGAN_TLS_TRUSTSTORE_PASSWORD=mulligan_tls_pw
+export MULLIGAN_TLS_KEYSTORE=/path/to/infra/certs/client-customer.p12
+export MULLIGAN_TLS_KEYSTORE_PASSWORD=mulligan_tls_pw
 export MULLIGAN_HMAC_KEY=<same key as server>
 java -jar customer-ui-1.0.jar
 java -cp 'lib/*' com.mulligan.customer.cli.CustomerCLI events CUST-1001 604-95-839

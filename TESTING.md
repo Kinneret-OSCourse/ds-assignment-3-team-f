@@ -63,7 +63,7 @@ test evidence.
 | AT-16 | Empty branch | No transactions in a clean DB | Run transactions command before any stop events | Prints `No transactions found.` | Covered by test |
 
 Implementation note: Assignment 1 says MO retrieves reports from queues. In the
-verified Assignment 2 design, producers still send signed queue messages and
+verified Assignment 3 design, producers still send signed queue messages and
 parking-server validates them, but MO reports read the durable PostgreSQL report
 tables so reports remain available after the validation consumer acknowledges
 queue messages.
