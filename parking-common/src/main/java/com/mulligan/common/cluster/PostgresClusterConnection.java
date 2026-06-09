@@ -9,7 +9,7 @@ import java.sql.SQLException;
 
 /**
  * Cluster-aware Postgres connection helper. Builds a multi-host JDBC URL
- * pointing at the three Patroni replicas and asks the driver to always pick
+ * pointing at the database cluster nodes and asks the driver to always pick
  * the primary, falling over to whichever node is now the primary if the
  * previous one fails.
  *
@@ -25,6 +25,9 @@ import java.sql.SQLException;
  * just one more host.
  */
 public final class PostgresClusterConnection {
+
+    private static final int CONNECT_ATTEMPTS = 8;
+    private static final long RETRY_DELAY_MILLIS = 1_500L;
 
     static {
         try {
@@ -81,14 +84,28 @@ public final class PostgresClusterConnection {
      * @throws SQLException when no cluster member accepts the connection
      */
     public Connection getConnection() throws SQLException {
-        try {
-            return DriverManager.getConnection(url, user, password);
-        } catch (SQLException sql) {
-            if (logger != null) {
-                logger.operational("DB connect failed: " + sql.getSQLState() + " " + sql.getMessage());
+        SQLException last = null;
+        for (int attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
+            try {
+                return DriverManager.getConnection(url, user, password);
+            } catch (SQLException sql) {
+                last = sql;
+                if (logger != null) {
+                    logger.operational("DB connect failed attempt=" + attempt + " state="
+                        + sql.getSQLState() + " " + sql.getMessage());
+                }
+                if (attempt == CONNECT_ATTEMPTS || !isTransientConnectionFailure(sql)) {
+                    throw sql;
+                }
+                try {
+                    Thread.sleep(RETRY_DELAY_MILLIS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw sql;
+                }
             }
-            throw sql;
         }
+        throw last;
     }
 
     /** Visible for tests. */
@@ -107,5 +124,10 @@ public final class PostgresClusterConnection {
             value = System.getenv(env);
         }
         return value;
+    }
+
+    private static boolean isTransientConnectionFailure(SQLException sql) {
+        String state = sql.getSQLState();
+        return state == null || state.startsWith("08") || "57P01".equals(state) || "57P02".equals(state);
     }
 }
