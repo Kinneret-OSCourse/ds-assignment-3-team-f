@@ -2,6 +2,16 @@
 
 Course: Distributed Systems
 
+
+## Team
+
+| Student Name    | Student ID | Main Task in Assignment 2 | Hours |
+| --------------- | ---------- | ------------------------- | ----: |
+| Mohammad Drwish | 319043402  | Task 5 — Blue Teaming, Defense.md, security layer (parking-common) | 12 |
+| Hady Amasha     | 326347564  | Task 1 — UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
+| Fares Elias     | 324932474  | Task 2 — RabbitMQ 3-node cluster + quorum queues | 18 |
+| Rojeh Safieh    | 212793824  | Task 3 — Patroni Postgres cluster, Task 4 — DevOps/Docker/Tests | 10 |
+
 ## Scope
 
 This repository contains the Assignment 3 system:
