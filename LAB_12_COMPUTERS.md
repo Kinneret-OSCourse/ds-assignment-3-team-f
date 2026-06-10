@@ -215,6 +215,12 @@ CLI mode for the UI computers:
 .\scripts\run-ui.ps1 -App mo -Cli
 ```
 
+On its first boot, computer 1 (`db1`) seeds the database schema and demo data,
+creates the least-privilege `mulligan_app` login role, and creates the shared
+`security_nonces` replay-protection table. If you later change
+`MULLIGAN_DB_APP_PASSWORD` in `.env`, run the clean commands from section 5
+with `-v` on computer 1 so the role is recreated with the new password.
+
 ## 7. Network Checks
 
 From each UI computer:
