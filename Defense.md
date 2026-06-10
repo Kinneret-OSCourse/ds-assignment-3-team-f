@@ -1,4 +1,4 @@
-﻿# Defense Report - Mulligan Parking System (Assignment 3)
+# Defense Report - Mulligan Parking System (Assignment 3)
 
 Course: Distributed Systems, Semester 2, 5786
 Team F: Mohammad Drwish, Hady Amasha, Fares Elias, Rojeh Safieh
@@ -54,9 +54,28 @@ exact opt-in procedure is in `DEPLOY.md`.
 | V13 | Runtime CA signing key exposure | Confidentiality/Integrity | Critical | Generated `ca-key.pem` lived beside runtime certs | `generate-certs.*` stores the signing key under ignored `infra/private-ca/`; containers mount only `infra/certs/` | runtime cert mount contains no CA private key |
 | V14 | Node-local replay memory | Integrity | High | In-memory nonce cache did not synchronize across validators | `MULLIGAN_NONCE_STORE=jdbc` stores nonce claims in `security_nonces` with a primary key | duplicate nonce insert is rejected across nodes |
 
-## 3. Fix Details
+## 3. Root Cause Analysis
 
-### 3.1 Message Authentication, Replay, and Freshness
+The per-vulnerability root causes are listed in the "Root cause" column of the
+inventory above. Grouped, they trace back to three design decisions:
+
+1. **Classroom defaults were shipped to production.** Assignment 1 used
+   plaintext transport, the default `guest` account expectations, one broad
+   service credential, and a single broker and database node (V1, V5, V6, V7,
+   V8, V9). Convenience defaults became the attack surface.
+2. **Messages were trusted because they arrived, not because they were
+   authenticated.** Raw JSON without signatures, nonces, or freshness checks
+   allowed forging, replaying, and delaying messages, and the first fix kept
+   replay memory node-local so the cluster did not share rejections (V2, V3,
+   V4, V14).
+3. **Failure paths leaked more than the success paths.** Thin validation,
+   stack traces in client responses, no persistent security log, and a CA
+   signing key stored beside runtime certificates all came from treating
+   error handling and key custody as afterthoughts (V10, V11, V12, V13).
+
+## 4. Fix Details
+
+### 4.1 Message Authentication, Replay, and Freshness
 
 All producer paths publish through `SecurePublisher`, which wraps payloads in:
 
@@ -75,7 +94,7 @@ rejects timestamps older than 60 seconds, rejects future-skewed messages, and
 consults `NonceStore` before acknowledging a queue message. Rejections are
 logged with `REJECT bad-hmac`, `REJECT replay`, or `REJECT stale-timestamp`.
 
-### 3.2 RabbitMQ Hardening
+### 4.2 RabbitMQ Hardening
 
 `infra/rabbitmq/definitions.json` declares:
 
@@ -92,14 +111,14 @@ After a fresh cluster start, run `scripts/grow-quorum-queues.*` so each queue
 has members on `rabbit-1`, `rabbit-2`, and `rabbit-3`. This step is repeatable
 and is included in the deployment instructions.
 
-### 3.3 Database Cluster
+### 4.3 Database Cluster
 
 The Docker stack runs `patroni-1`, `patroni-2`, `patroni-3`, `etcd`, and
 `haproxy`. `db-init` creates `mulligan_db`, loads the seed schema/data, and
 applies least-privilege grants for `mulligan_app`. The verified state after
 startup is one leader and two streaming replicas.
 
-### 3.4 Input Validation
+### 4.4 Input Validation
 
 `InputValidator` validates:
 
@@ -115,7 +134,7 @@ startup is one leader and two streaming replicas.
 Validation failures are logged internally and returned as generic client-safe
 messages or error codes.
 
-### 3.5 Error Handling and Logging
+### 4.5 Error Handling and Logging
 
 The service layer logs real exceptions through `SecureLogger` and returns
 generic client responses such as `ERR_INTERNAL`, `ERR_UNAVAILABLE`, usage text,
@@ -123,7 +142,7 @@ or validation messages. Security events, malformed messages, replay attempts,
 and operational connection errors are written to the persistent Docker volume
 mounted at `/var/log/mulligan/security.log`.
 
-### 3.6 TLS / mTLS Capability
+### 4.6 TLS / mTLS Capability
 
 RabbitMQ mTLS is enabled in the recommended default Compose stack. TLS for JDBC is implemented in the client only until the Patroni and HAProxy listeners are configured for TLS. The current matrix is:
 
@@ -164,13 +183,13 @@ HAProxy `bind ssl crt` and `verify required` backend lines, and the
 verification commands) is documented in `DEPLOY.md` §"Optional: PostgreSQL
 listener-side TLS".
 
-## 4. Updated Security Architecture
+## 5. Updated Security Architecture
 
 Default verified demo path:
 
 ```text
 Customer/PEO/MO CLI
-   | AMQP 5672 with HMAC envelope, nonce, timestamp
+   | AMQPS 5671 (mTLS) with HMAC envelope, nonce, timestamp
    v
 RabbitMQ 3-node cluster
    | quorum queues: Transactions, Citations
@@ -192,7 +211,7 @@ Customer/PEO/MO/parking-server
 RabbitMQ/PostgreSQL cluster endpoints
 ```
 
-## 5. Verified Test Evidence
+## 6. Verified Test Evidence
 
 | Area | Command / proof | Expected result | Verified |
 |---|---|---|---|
@@ -213,7 +232,7 @@ RabbitMQ/PostgreSQL cluster endpoints
 | mTLS client rejection | connect to 5671 without a client cert | handshake is refused; service containers with `client-<svc>.p12` connect successfully | Implemented in default compose |
 | Postgres/JDBC TLS | not enabled in compose (listener not configured); `MULLIGAN_DB_TLS=true` is wired in the client | n/a in default; opt-in procedure in `DEPLOY.md` section "Optional: PostgreSQL listener-side TLS" | Client-side ready, listener side documented-only in this revision because Spilo bootstrap + HAProxy frontend changes are required together and were judged too risky to flip without dedicated verification of DB failover under TLS |
 
-## 6. Lessons Learned
+## 7. Lessons Learned
 
 - Security claims must match the actual deployment profile. RabbitMQ mTLS is
   active in the recommended compose stack; PostgreSQL TLS should remain labeled
