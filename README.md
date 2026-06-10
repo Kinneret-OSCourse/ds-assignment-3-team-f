@@ -1,11 +1,11 @@
 # Mulligan Parking System - Assignment 3
 
-Course: Distributed Systems
-
+- Course: SE 424: Distributed Systems
+- Semester: Semester 2, 5786 (2025-2026)
 
 ## Team
 
-| Student Name    | Student ID | Main Task in Assignment 2 | Hours |
+| Student Name    | Student ID | Main Task in Assignment 3 | Hours |
 | --------------- | ---------- | ------------------------- | ----: |
 | Mohammad Drwish | 319043402  | Task 5 — Blue Teaming, Defense.md, security layer (parking-common) | 12 |
 | Hady Amasha     | 326347564  | Task 1 — UI/CLI cluster adaptation (Customer, PEO, MO) | 10 |
