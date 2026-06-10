@@ -5,14 +5,12 @@
 -- services. Replicated automatically to the two standby nodes via Postgres
 -- streaming replication.
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mulligan_app') THEN
-        CREATE ROLE mulligan_app LOGIN PASSWORD 'mulligan_app_pw';
-    END IF;
-END
-$$;
+\set app_password `if [ -n "$MULLIGAN_DB_APP_PASSWORD" ]; then printf %s "$MULLIGAN_DB_APP_PASSWORD"; else printf %s "mulligan_app_pw"; fi`
 
+SELECT format('CREATE ROLE mulligan_app LOGIN PASSWORD %L', :'app_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mulligan_app') \gexec
+
+ALTER ROLE mulligan_app WITH PASSWORD :'app_password';
 ALTER ROLE mulligan_app SET search_path = public;
 
 -- Grant just enough privileges for the application workload. No SUPERUSER,

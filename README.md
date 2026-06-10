@@ -88,8 +88,9 @@ Protocol details are in [CONSENSUS_DESIGN.md](CONSENSUS_DESIGN.md).
 ## 12-Computer Classroom Run
 
 Use [LAB_12_COMPUTERS.md](LAB_12_COMPUTERS.md) for the full classroom setup.
-The 12-computer deployment has 9 Docker server computers and 3 Java UI
-computers. The 9 Docker computers can be started through the shared
+The 12-computer deployment has 9 Docker/service computers and 3 Java UI
+computers. Computer 4 runs RabbitMQ node 1 and the queue validation server.
+The 9 Docker computers can be started through the shared
 `docker-compose.12-computers.yml` profile file or through the per-role wrapper
 files `docker-compose-db1.yml` ... `docker-compose-rec3.yml`. The UI computers
 use `scripts\run-ui.ps1`, so they do not need their own compose files.
@@ -101,7 +102,7 @@ Short role map:
 | 1 | PostgreSQL node 1 | `.\scripts\start-12-computer-node.ps1 -Role db1` |
 | 2 | PostgreSQL node 2 | `.\scripts\start-12-computer-node.ps1 -Role db2` |
 | 3 | PostgreSQL node 3 | `.\scripts\start-12-computer-node.ps1 -Role db3` |
-| 4 | RabbitMQ node 1 | `.\scripts\start-12-computer-node.ps1 -Role rmq1` |
+| 4 | RabbitMQ node 1 + queue server | `.\scripts\start-12-computer-node.ps1 -Role rmq1` |
 | 5 | RabbitMQ node 2 | `.\scripts\start-12-computer-node.ps1 -Role rmq2` |
 | 6 | RabbitMQ node 3 | `.\scripts\start-12-computer-node.ps1 -Role rmq3` |
 | 7 | Recommender node 1 | `.\scripts\start-12-computer-node.ps1 -Role rec1` |

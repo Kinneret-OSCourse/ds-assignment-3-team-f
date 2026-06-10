@@ -10,5 +10,12 @@ services:
       service: rabbitmq1
     profiles: ["rmq1"]
 
+  parking-server:
+    extends:
+      file: docker-compose.12-computers.yml
+      service: parking-server
+    profiles: ["rmq1"]
+
 volumes:
   rabbitmq1_data:
+  mulligan_logs:

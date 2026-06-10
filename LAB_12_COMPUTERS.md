@@ -57,7 +57,7 @@ computers, ask the lab administrator to open the ports listed below.
 | 1 | PostgreSQL node 1 | `10.0.201.11` |
 | 2 | PostgreSQL node 2 | `10.0.201.12` |
 | 3 | PostgreSQL node 3 | `10.0.201.13` |
-| 4 | RabbitMQ node 1 | `10.0.201.21` |
+| 4 | RabbitMQ node 1 + queue validation server | `10.0.201.21` |
 | 5 | RabbitMQ node 2 | `10.0.201.22` |
 | 6 | RabbitMQ node 3 | `10.0.201.23` |
 | 7 | Recommender node 1 | `10.0.201.31` |
@@ -94,7 +94,10 @@ Copy-Item .env.12-computers.example .env
 
 Edit `.env` and use the same values on all 12 computers. The example contains
 all required variables: database passwords, RabbitMQ passwords, TLS password,
-cluster IPs, UI connection strings, and recommender endpoints.
+cluster IPs, UI connection strings, and recommender endpoints. On a fresh
+database, `MULLIGAN_DB_APP_PASSWORD` is used when creating the `mulligan_app`
+database role, so keep that value identical on the database and UI/recommender
+computers.
 
 For the IP plan above, the important host lists are:
 
@@ -116,7 +119,8 @@ Run this on computer 1 after `.env` is ready:
 .\scripts\generate-certs.ps1
 ```
 
-Copy these generated folders to every RabbitMQ computer and every UI computer:
+Copy these generated folders to every RabbitMQ computer and every UI computer.
+Computer 4 also needs them because it runs the queue validation server:
 
 ```text
 infra\certs
@@ -179,7 +183,7 @@ Run one command on each computer:
 .\scripts\start-12-computer-node.ps1 -Role db1
 .\scripts\start-12-computer-node.ps1 -Role db2
 .\scripts\start-12-computer-node.ps1 -Role db3
-.\scripts\start-12-computer-node.ps1 -Role rmq1
+.\scripts\start-12-computer-node.ps1 -Role rmq1   # starts RabbitMQ node 1 and parking-server
 .\scripts\start-12-computer-node.ps1 -Role rmq2
 .\scripts\start-12-computer-node.ps1 -Role rmq3
 .\scripts\start-12-computer-node.ps1 -Role rec1
@@ -244,15 +248,16 @@ Each result should show `TcpTestSucceeded : True`.
 On computer 1:
 
 ```powershell
-docker compose -f docker-compose.12-computers.yml exec postgres-node1 repmgr cluster show
+docker compose -f docker-compose.12-computers.yml --profile db1 exec postgres-node1 repmgr cluster show
 ```
 
 On computer 4:
 
 ```powershell
-docker compose -f docker-compose.12-computers.yml exec rabbitmq1 rabbitmq-diagnostics listeners
-docker compose -f docker-compose.12-computers.yml exec rabbitmq1 rabbitmqctl cluster_status
-docker compose -f docker-compose.12-computers.yml exec rabbitmq1 rabbitmqctl list_queues name type leader members
+docker compose -f docker-compose.12-computers.yml --profile rmq1 exec rabbitmq1 rabbitmq-diagnostics listeners
+docker compose -f docker-compose.12-computers.yml --profile rmq1 exec rabbitmq1 rabbitmqctl cluster_status
+docker compose -f docker-compose.12-computers.yml --profile rmq1 exec rabbitmq1 rabbitmqctl list_queues name type leader members
+docker compose -f docker-compose.12-computers.yml --profile rmq1 logs parking-server
 ```
 
 Expected:
@@ -261,6 +266,7 @@ Expected:
 - RabbitMQ listens on `amqp/ssl` port `5671`.
 - `Transactions` and `Citations` are quorum queues.
 - RabbitMQ cluster status shows three running nodes.
+- `parking-server` logs `Mulligan Queue Server started.`
 - Customer recommendations still work when one recommender node is malicious.
 
 ## 9. Common Mistakes
