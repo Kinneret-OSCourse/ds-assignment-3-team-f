@@ -123,6 +123,7 @@ services:
     image: postgres:16-alpine
     environment:
       PGPASSWORD: ${MULLIGAN_DB_SUPER_PASSWORD:-mulligan_super_pw}
+      MULLIGAN_DB_APP_PASSWORD: ${MULLIGAN_DB_APP_PASSWORD:-mulligan_app_pw}
     volumes:
       - ./infra/postgres/init.sql:/sql/01-init.sql:ro
       - ./infra/postgres/full-seed.sql:/sql/02-seed.sql:ro
@@ -139,6 +140,8 @@ services:
         psql -h haproxy -p 5432 -U postgres -d mulligan_db -tc "SELECT to_regclass('public.payment_transactions')" | grep -q payment_transactions \
           || psql -h haproxy -p 5432 -U postgres -d mulligan_db -v ON_ERROR_STOP=1 -f /sql/02-seed.sql
         psql -h haproxy -p 5432 -U postgres -d mulligan_db -v ON_ERROR_STOP=1 -f /sql/03-cluster-bootstrap.sql
+        psql -h haproxy -p 5432 -U postgres -d mulligan_db -v ON_ERROR_STOP=1 \
+          -c "ALTER ROLE mulligan_app WITH LOGIN PASSWORD '$$MULLIGAN_DB_APP_PASSWORD'"
 
   rabbit-1:
     image: rabbitmq:3.13-management
@@ -154,9 +157,6 @@ services:
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
       - ./infra/certs:/etc/rabbitmq/certs:ro
-    extra_hosts:
-      - "rabbit-4:10.0.201.7"
-      - "rabbit-5:10.0.201.28"
     ports:
       - "127.0.0.1:${MULLIGAN_RABBIT_AMQPS_PORT:-5671}:5671"
       - "127.0.0.1:${MULLIGAN_RABBIT_MANAGEMENT_PORT:-15672}:15672"
