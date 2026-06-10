@@ -2,6 +2,54 @@
 
 This is the from-zero run plan for Assignment 3.
 
+## No-Administrator Fallback
+
+Real 12-computer mode requires inbound network access between the lab
+computers. If you cannot open Windows Firewall ports, do not use the 12
+physical-computer commands. Instead, run the full distributed stack on one
+computer with Docker. Docker creates an internal network, so PostgreSQL,
+RabbitMQ, recommender nodes, the queue server, and UI CLI containers can talk
+without opening Windows inbound firewall rules.
+
+Run on one computer:
+
+```powershell
+cd "C:\path\to\ds-assignment-3-team-f"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+.\scripts\generate-certs.ps1
+$env:MULLIGAN_HMAC_KEY='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
+docker compose up -d --build
+.\scripts\grow-quorum-queues.ps1
+```
+
+Verify:
+
+```powershell
+docker compose ps
+docker compose exec -T patroni-1 patronictl list
+docker compose exec -T rabbit-1 rabbitmqctl cluster_status
+docker compose exec -T rabbit-1 rabbitmqctl list_queues name type online members
+
+docker compose exec -T customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI recommend S003
+docker compose exec -T customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI start CUST-1001 604-95-839 S004
+docker compose exec -T customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI stop CUST-1001 604-95-839
+docker compose exec -T customer-ui java -cp /app/lib/* com.mulligan.customer.cli.CustomerCLI events CUST-1001 604-95-839
+```
+
+This fallback still demonstrates:
+
+- 3 PostgreSQL nodes with leader/replica behavior.
+- 3 RabbitMQ nodes with quorum queues.
+- 3 recommender nodes with majority consensus.
+- Customer, PEO, and MO command flows.
+- Queue server, HMAC validation, nonce replay protection, and RabbitMQ mTLS.
+
+Important: this is a fallback demo mode. It proves the distributed services,
+but it is not 12 separate physical computers. If the teacher requires 12 real
+computers, ask the lab administrator to open the ports listed below.
+
 ## Computer Roles
 
 | Computer | Role | Example IP |
