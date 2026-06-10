@@ -34,6 +34,7 @@ build/
 .gradle-user-home/
 
 # Generated local runtime material
+.env
 infra/certs/
 infra/private-ca/
 infra/rabbitmq/certs/
