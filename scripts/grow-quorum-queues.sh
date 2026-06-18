@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-PROJECT=${MULLIGAN_COMPOSE_PROJECT:-mulligan}
+PROJECT=${1:-${MULLIGAN_COMPOSE_PROJECT:-mulligan}}
 
 for queue in Transactions Citations; do
   for node in rabbit@rabbit-2 rabbit@rabbit-3; do

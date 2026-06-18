@@ -1,0 +1,4 @@
+[2026-06-18T19:47:33.329304Z] [OPS] [peo-db] DB cluster JDBC URL configured for [localhost:5432]
+[2026-06-18T19:47:33.922663Z] [OPS] [peo-ui] AMQP factory built tls=false hosts=[localhost:5672]
+[2026-06-18T19:47:33.929567Z] [OPS] [peo-ui] AMQP connect failed for all nodes: ACCESS_REFUSED - Login was refused using authentication mechanism PLAIN. For details see the broker logfile.
+[2026-06-18T19:47:33.929818Z] [SECURITY] [peo-ui] PEO UI failed to publish citation id=15b400e8-b59d-41a3-a99e-76df4c0118f1 err=AuthenticationFailureException

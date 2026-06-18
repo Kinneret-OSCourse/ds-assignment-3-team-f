@@ -15,10 +15,6 @@ if (-not (Test-Path ".env")) {
     throw "Missing .env. Copy .env.12-computers.example to .env and fill in the real lab IPs and secrets first."
 }
 
-if ($Role.StartsWith("rmq") -and -not (Test-Path "infra\certs\server-cert.pem")) {
-    throw "Missing RabbitMQ TLS files. Run scripts\generate-certs.ps1 once, then copy infra\certs to all RabbitMQ and UI computers."
-}
-
 if ($Role.StartsWith("rec") -and -not (Test-Path "parking-recommender\Dockerfile")) {
     throw "Missing parking-recommender module. Run from the Assignment 3 repository root."
 }

@@ -1,0 +1,34 @@
+# Local-only database cluster test.
+#
+# This simulates the three physical DB computers on one Docker host by giving
+# the containers the same lab-style IPs used in .env.12-computers.example.
+# The database still listens on container port 5432; host ports are shifted so
+# all three nodes can run on one laptop.
+
+services:
+  postgres-node1:
+    ports: !override
+      - "127.0.0.1:15432:5432"
+    networks:
+      default:
+        ipv4_address: 10.0.6.30
+
+  postgres-node2:
+    ports: !override
+      - "127.0.0.1:15433:5432"
+    networks:
+      default:
+        ipv4_address: 10.0.6.31
+
+  postgres-node3:
+    ports: !override
+      - "127.0.0.1:15434:5432"
+    networks:
+      default:
+        ipv4_address: 10.0.6.32
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.0.6.0/24

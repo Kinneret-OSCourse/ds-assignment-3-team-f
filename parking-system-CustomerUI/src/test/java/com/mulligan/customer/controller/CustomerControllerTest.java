@@ -99,7 +99,20 @@ class CustomerControllerTest {
 
         String result = controller.recommendParking("S003");
 
-        assertEquals("Recommendation result: S003;1", result);
+        assertEquals("Recommendation result:\nSpace 3 - 1 citation", result);
+    }
+
+    @Test
+    void recommendParkingFormatsMultipleConsensusResults() {
+        CustomerController controller = new CustomerController(
+                new StubParkingService(),
+                new AllowOnlyCustomerAuthService(),
+                new MultipleResultRecommenderClient()
+        );
+
+        String result = controller.recommendParking("S003");
+
+        assertEquals("Recommendation result:\nSpace 2 - 3 citations\nSpace 4 - 3 citations", result);
     }
 
     private static class StubParkingService extends ParkingService {
@@ -149,6 +162,13 @@ class CustomerControllerTest {
         @Override
         public String recommend(String requestedSpace) {
             return "S003;1";
+        }
+    }
+
+    private static class MultipleResultRecommenderClient extends RecommenderClient {
+        @Override
+        public String recommend(String requestedSpace) {
+            return "S002;3, S004;3";
         }
     }
 }

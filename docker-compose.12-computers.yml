@@ -119,9 +119,11 @@ services:
     ports:
       - "4369:4369"
       - "25672:25672"
-      - "5671:5671"
-      - "15671:15671"
-    extra_hosts: *cluster_hosts
+      - "5672:5672"
+      - "15672:15672"
+    extra_hosts:
+      - "rabbit-2:${LAB_RMQ2_IP}"
+      - "rabbit-3:${LAB_RMQ3_IP}"
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
       RABBITMQ_NODENAME: rabbit@rabbit-1
@@ -148,9 +150,8 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq1_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -165,21 +166,16 @@ services:
     extra_hosts: *cluster_hosts
     environment:
       <<: *app_env
-      MULLIGAN_QUEUE_HOSTS: rabbit-1:5671,rabbit-2:5671,rabbit-3:5671
-      MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-true}
+      MULLIGAN_QUEUE_HOSTS: rabbit-1:5672,rabbit-2:5672,rabbit-3:5672
+      MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-false}
       MULLIGAN_QUEUE_USER_SERVER: mulligan_server
       MULLIGAN_QUEUE_PASSWORD_SERVER: ${MULLIGAN_QUEUE_SERVER_PASSWORD:?set MULLIGAN_QUEUE_SERVER_PASSWORD}
-      MULLIGAN_TLS_TRUSTSTORE: /etc/mulligan/certs/truststore.p12
-      MULLIGAN_TLS_TRUSTSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
-      MULLIGAN_TLS_KEYSTORE: /etc/mulligan/certs/client-server.p12
-      MULLIGAN_TLS_KEYSTORE_PASSWORD: ${MULLIGAN_TLS_PASSWORD:-mulligan_tls_pw}
     depends_on:
       rabbitmq1:
         condition: service_healthy
     restart: on-failure
     volumes:
       - mulligan_logs:/var/log/mulligan
-      - ./infra/certs:/etc/mulligan/certs:ro
 
   rabbitmq2:
     profiles: ["rmq2"]
@@ -188,9 +184,11 @@ services:
     ports:
       - "4369:4369"
       - "25672:25672"
-      - "5671:5671"
-      - "15671:15671"
-    extra_hosts: *cluster_hosts
+      - "5672:5672"
+      - "15672:15672"
+    extra_hosts:
+      - "rabbit-1:${LAB_RMQ1_IP}"
+      - "rabbit-3:${LAB_RMQ3_IP}"
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
       RABBITMQ_NODENAME: rabbit@rabbit-2
@@ -212,8 +210,7 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq2_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -227,9 +224,11 @@ services:
     ports:
       - "4369:4369"
       - "25672:25672"
-      - "5671:5671"
-      - "15671:15671"
-    extra_hosts: *cluster_hosts
+      - "5672:5672"
+      - "15672:15672"
+    extra_hosts:
+      - "rabbit-1:${LAB_RMQ1_IP}"
+      - "rabbit-2:${LAB_RMQ2_IP}"
     environment:
       RABBITMQ_ERLANG_COOKIE: ${MULLIGAN_RABBITMQ_ERLANG_COOKIE:?set MULLIGAN_RABBITMQ_ERLANG_COOKIE}
       RABBITMQ_NODENAME: rabbit@rabbit-3
@@ -251,8 +250,7 @@ services:
         wait "$$pid"
     volumes:
       - rabbitmq3_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -318,3 +316,5 @@ volumes:
   rabbitmq2_data:
   rabbitmq3_data:
   mulligan_logs:
+
+

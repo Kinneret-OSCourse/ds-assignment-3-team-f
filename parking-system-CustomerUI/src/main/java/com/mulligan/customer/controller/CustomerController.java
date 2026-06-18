@@ -146,11 +146,62 @@ public class CustomerController {
     public String recommendParking(String requestedSpace) {
         try {
             String recommendation = recommenderClient.recommend(requestedSpace);
-            return "Recommendation result: " + recommendation;
+            return "Recommendation result:\n" + formatRecommendation(recommendation);
         } catch (IllegalArgumentException e) {
             return "Error: " + e.getMessage();
         } catch (RuntimeException e) {
             return "Error: Recommender service unavailable.";
         }
+    }
+
+    /**
+     * Purpose: Converts the recommender wire format into customer-facing text
+     * that shows each selected parking space and its citation count.
+     *
+     * @param recommendation raw recommender response
+     * @return readable recommendation lines for the UI and CLI
+     */
+    private String formatRecommendation(String recommendation) {
+        if (recommendation == null || recommendation.isBlank()) {
+            return "No recommendation returned.";
+        }
+
+        String trimmed = recommendation.trim();
+        if ("EMPTY".equalsIgnoreCase(trimmed) || "Empty List".equalsIgnoreCase(trimmed)) {
+            return "Empty List";
+        }
+        if (!trimmed.contains(";")) {
+            return trimmed;
+        }
+
+        StringBuilder formatted = new StringBuilder();
+        for (String token : trimmed.split(",")) {
+            String[] pieces = token.trim().split(";", 2);
+            if (pieces.length != 2) {
+                return trimmed;
+            }
+
+            String space = displaySpace(pieces[0].trim());
+            String citations = pieces[1].trim();
+            if (formatted.length() > 0) {
+                formatted.append('\n');
+            }
+            formatted.append("Space ")
+                    .append(space)
+                    .append(" - ")
+                    .append(citations)
+                    .append(" citation")
+                    .append("1".equals(citations) ? "" : "s");
+        }
+        return formatted.toString();
+    }
+
+    private String displaySpace(String rawSpace) {
+        String digits = rawSpace.replaceAll("\\D+", "");
+        if (digits.isBlank()) {
+            return rawSpace;
+        }
+        String normalized = digits.replaceFirst("^0+(?!$)", "");
+        return normalized.isBlank() ? "0" : normalized;
     }
 }

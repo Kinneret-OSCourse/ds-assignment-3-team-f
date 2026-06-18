@@ -26,8 +26,8 @@ x-mulligan-app-env: &mulligan-app-env
   MULLIGAN_DB_USER: mulligan_app
   MULLIGAN_DB_PASSWORD: ${MULLIGAN_DB_APP_PASSWORD:-mulligan_app_pw}
   MULLIGAN_DB_TLS: ${MULLIGAN_DB_TLS:-false}
-  MULLIGAN_QUEUE_HOSTS: ${MULLIGAN_QUEUE_HOSTS:-rabbit-1:5671,rabbit-2:5671,rabbit-3:5671}
-  MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-true}
+  MULLIGAN_QUEUE_HOSTS: ${MULLIGAN_QUEUE_HOSTS:-rabbit-1:5672,rabbit-2:5672,rabbit-3:5672}
+  MULLIGAN_QUEUE_TLS: ${MULLIGAN_QUEUE_TLS:-false}
   MULLIGAN_TLS_TRUSTSTORE: ${MULLIGAN_TLS_TRUSTSTORE:-/etc/mulligan/certs/truststore.p12}
   MULLIGAN_TLS_TRUSTSTORE_PASSWORD: ${MULLIGAN_TLS_TRUSTSTORE_PASSWORD:-mulligan_tls_pw}
   MULLIGAN_TLS_KEYSTORE: ${MULLIGAN_TLS_KEYSTORE:-}
@@ -153,12 +153,11 @@ services:
       RABBITMQ_DEFAULT_PASS: ${MULLIGAN_RABBIT_ADMIN_PASSWORD:-mulligan_admin_pw}
     volumes:
       - rabbit1_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
     ports:
-      - "127.0.0.1:${MULLIGAN_RABBIT_AMQPS_PORT:-5671}:5671"
+      - "127.0.0.1:${MULLIGAN_RABBIT_AMQP_PORT:-5672}:5672"
       - "127.0.0.1:${MULLIGAN_RABBIT_MANAGEMENT_PORT:-15672}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
@@ -174,10 +173,9 @@ services:
       RABBITMQ_NODENAME: rabbit@rabbit-2
     volumes:
       - rabbit2_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
     depends_on:
       rabbit-1:
         condition: service_healthy
@@ -190,10 +188,9 @@ services:
       RABBITMQ_NODENAME: rabbit@rabbit-3
     volumes:
       - rabbit3_data:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq-mtls.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
-      - ./infra/certs:/etc/rabbitmq/certs:ro
     depends_on:
       rabbit-1:
         condition: service_healthy

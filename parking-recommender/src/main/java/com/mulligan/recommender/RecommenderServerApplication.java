@@ -66,11 +66,14 @@ public class RecommenderServerApplication extends Application {
         form.add(malicious, 1, 4);
 
         Button start = new Button("Start Node");
+        Button applyMode = new Button("Apply Mode");
         Button recommend = new Button("Test Recommend");
+        applyMode.setDisable(true);
         recommend.setDisable(true);
 
         start.setOnAction(e -> {
             start.setDisable(true);
+            applyMode.setDisable(false);
             recommend.setDisable(false);
             Thread worker = new Thread(() -> RecommenderCLI.main(new String[] {
                     "serve", nodeId.getText(), port.getText(), peers.getText(), String.valueOf(malicious.isSelected())
@@ -80,23 +83,26 @@ public class RecommenderServerApplication extends Application {
             output.setText("Node started on port " + port.getText() + ".");
         });
 
+        applyMode.setOnAction(e -> {
+            Thread worker = new Thread(() -> {
+                String mode = malicious.isSelected() ? "malicious" : "normal";
+                String result = runCli("mode", "http://localhost:" + port.getText(), mode);
+                Platform.runLater(() -> output.setText("Mode changed to " + result.trim() + "."));
+            }, "recommender-gui-mode");
+            worker.setDaemon(true);
+            worker.start();
+        });
+
         recommend.setOnAction(e -> {
             Thread worker = new Thread(() -> {
-                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                java.io.PrintStream original = System.out;
-                try (java.io.PrintStream capture = new java.io.PrintStream(baos, true, StandardCharsets.UTF_8)) {
-                    System.setOut(capture);
-                    RecommenderCLI.main(new String[] {"recommend", "http://localhost:" + port.getText(), testSpace.getText()});
-                } finally {
-                    System.setOut(original);
-                }
-                Platform.runLater(() -> output.setText(baos.toString(StandardCharsets.UTF_8)));
+                String result = runCli("recommend", "http://localhost:" + port.getText(), testSpace.getText());
+                Platform.runLater(() -> output.setText(result));
             }, "recommender-gui-test");
             worker.setDaemon(true);
             worker.start();
         });
 
-        HBox buttons = new HBox(10, start, recommend);
+        HBox buttons = new HBox(10, start, applyMode, recommend);
         buttons.setAlignment(Pos.CENTER_LEFT);
 
         Label title = new Label("Mulligan Recommender Node");
@@ -112,5 +118,17 @@ public class RecommenderServerApplication extends Application {
     private static String envOr(String name, String fallback) {
         String value = System.getenv(name);
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private static String runCli(String... args) {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream original = System.out;
+        try (java.io.PrintStream capture = new java.io.PrintStream(baos, true, StandardCharsets.UTF_8)) {
+            System.setOut(capture);
+            RecommenderCLI.main(args);
+        } finally {
+            System.setOut(original);
+        }
+        return baos.toString(StandardCharsets.UTF_8);
     }
 }

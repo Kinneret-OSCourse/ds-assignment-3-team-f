@@ -70,8 +70,8 @@ $env:MULLIGAN_DB_PASSWORD = Use-Value $envFile "MULLIGAN_DB_APP_PASSWORD" "mulli
 
 $env:MULLIGAN_QUEUE_HOSTS = $queueHosts
 $env:MULLIGAN_QUEUE_HOST = First-Host $queueHosts
-$env:MULLIGAN_QUEUE_PORT = Use-Value $envFile "MULLIGAN_QUEUE_PORT" "5671"
-$env:MULLIGAN_QUEUE_TLS = Use-Value $envFile "MULLIGAN_QUEUE_TLS" "true"
+$env:MULLIGAN_QUEUE_PORT = Use-Value $envFile "MULLIGAN_QUEUE_PORT" "5672"
+$env:MULLIGAN_QUEUE_TLS = Use-Value $envFile "MULLIGAN_QUEUE_TLS" "false"
 $env:MULLIGAN_HMAC_KEY = Use-Value $envFile "MULLIGAN_HMAC_KEY" "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 $env:MULLIGAN_RECOMMENDER_ENDPOINTS = Use-Value $envFile "MULLIGAN_RECOMMENDER_ENDPOINTS" "http://rec1:8081,http://rec2:8082,http://rec3:8083"
 
