@@ -71,6 +71,20 @@ class ConsensusCoordinatorTest {
     }
 
     @Test
+    void failsWhenOnePeerIsMissingAndRemainingVotesDisagree() throws Exception {
+        ConsensusCoordinator coordinator = coordinator(
+                List.of(option("S003", 1)),
+                List.of(peer("S004;1", 200), peer("ignored", 503)),
+                false
+        );
+
+        var response = coordinator.recommendWithConsensus("S003");
+
+        assertFalse(response.success());
+        assertEquals("No majority consensus.", response.message());
+    }
+
+    @Test
     void failsWhenThreeNodesDisagree() throws Exception {
         ConsensusCoordinator coordinator = coordinator(
                 List.of(option("S003", 1)),
