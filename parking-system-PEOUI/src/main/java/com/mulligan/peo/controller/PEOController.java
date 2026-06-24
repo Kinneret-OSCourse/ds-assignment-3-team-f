@@ -106,4 +106,41 @@ public class PEOController {
             return "Error: " + e.getMessage();
         }
     }
+
+    public String clearCitation(String spaceId) {
+        try {
+            boolean removed = parkingService.clearOneCitationForSpace(spaceId);
+            if (removed) {
+                return "Citation cleared successfully for space " + spaceId + ".";
+            }
+            return "No citation found for space " + spaceId + ".";
+        } catch (IllegalArgumentException e) {
+            return "Error: " + e.getMessage();
+        } catch (RuntimeException e) {
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    public String clearAllCitations() {
+        try {
+            int removed = parkingService.clearAllCitations();
+            if (removed == 0) {
+                return "No citations found to clear.";
+            }
+            return "Cleared " + removed + " citation(s).";
+        } catch (RuntimeException e) {
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    public String countCitationsForSpace(String spaceId) {
+        try {
+            int count = parkingService.countCitationsForSpace(spaceId);
+            return "Space " + spaceId + " has " + count + " citation(s).";
+        } catch (IllegalArgumentException e) {
+            return "Error: " + e.getMessage();
+        } catch (RuntimeException e) {
+            return "Error: " + e.getMessage();
+        }
+    }
 }

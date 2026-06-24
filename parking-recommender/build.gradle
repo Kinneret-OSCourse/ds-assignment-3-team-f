@@ -24,7 +24,7 @@ dependencies {
 }
 
 application {
-    mainClass.set('com.mulligan.recommender.RecommenderServerApplication')
+    mainClass.set('com.mulligan.recommender.MaliciousModeApplication')
 }
 
 tasks.register('runCli', JavaExec) {

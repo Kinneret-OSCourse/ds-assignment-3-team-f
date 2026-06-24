@@ -66,19 +66,37 @@ class ParkingServiceTest {
     }
 
     @Test
-    void startParkingAutoStopsExistingActiveParkingForSameCustomerVehicle() throws Exception {
+    void startParkingRejectsSecondActiveParkingForSameCustomerVehicle() throws Exception {
         String plateNumber = createVehicle("TCA");
         createCustomerWithAssignedVehicle("TCCUSTAUTO", plateNumber);
         insertParkingEvent("TCCUSTAUTO", plateNumber, "S001", "STARTED", LocalDateTime.now().minusMinutes(150), null, 0);
 
-        ParkingEvent newEvent = parkingService.startParking("TCCUSTAUTO", plateNumber, "S002");
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> parkingService.startParking("TCCUSTAUTO", plateNumber, "S002")
+        );
 
-        assertEquals("STARTED", newEvent.getStatus());
-        assertEquals("S002", newEvent.getParkingSpaceId());
+        assertTrue(exception.getMessage().contains("active parking"));
         assertEquals(1, countActiveParkingEvents(plateNumber));
-        assertEquals(1, countStoppedParkingEvents(plateNumber));
-        assertEquals(1, countPaymentTransactions(plateNumber));
-        assertTrue(getStoppedAmountTotal(plateNumber) > 0);
+        assertEquals(0, countStoppedParkingEvents(plateNumber));
+        assertEquals(0, countPaymentTransactions(plateNumber));
+    }
+
+    @Test
+    void startParkingRejectsSpaceAlreadyOccupiedByAnotherCustomer() throws Exception {
+        String firstPlateNumber = createVehicle("TCOA");
+        String secondPlateNumber = createVehicle("TCOB");
+        createCustomerWithAssignedVehicle("TCCUSTOCCUPY1", firstPlateNumber);
+        createCustomerWithAssignedVehicle("TCCUSTOCCUPY2", secondPlateNumber);
+        parkingService.startParking("TCCUSTOCCUPY1", firstPlateNumber, "S001");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> parkingService.startParking("TCCUSTOCCUPY2", secondPlateNumber, "S001")
+        );
+
+        assertTrue(exception.getMessage().contains("occupied"));
+        assertEquals(1, countActiveParkingEventsForSpace("S001"));
     }
 
     @Test
@@ -116,10 +134,11 @@ class ParkingServiceTest {
     @Test
     void getParkingEventsReturnsStoredEvents() throws Exception {
         String plateNumber = createVehicle("TCE");
+        createCustomerWithAssignedVehicle("TCCUSTEVENTS", plateNumber);
         insertParkingEvent(plateNumber, "S004", "STOPPED", LocalDateTime.now().minusHours(3), LocalDateTime.now().minusHours(2), 8.0);
         insertParkingEvent(plateNumber, "S005", "STARTED", LocalDateTime.now().minusMinutes(15), null, 0);
 
-        List<ParkingEvent> events = parkingService.getParkingEvents("customer-4", plateNumber);
+        List<ParkingEvent> events = parkingService.getParkingEvents("TCCUSTEVENTS", plateNumber);
 
         assertEquals(2, events.size());
         assertEquals("S005", events.get(0).getParkingSpaceId());
@@ -131,11 +150,12 @@ class ParkingServiceTest {
     @Test
     void getTotalAmountPaidSumsStoppedEventsOnly() throws Exception {
         String plateNumber = createVehicle("TCT");
+        createCustomerWithAssignedVehicle("TCCUSTTOTAL", plateNumber);
         insertParkingEvent(plateNumber, "S006", "STOPPED", LocalDateTime.now().minusHours(5), LocalDateTime.now().minusHours(4), 5.50);
         insertParkingEvent(plateNumber, "S007", "STOPPED", LocalDateTime.now().minusHours(3), LocalDateTime.now().minusHours(2), 7.25);
         insertParkingEvent(plateNumber, "S008", "STARTED", LocalDateTime.now().minusMinutes(20), null, 0);
 
-        double total = parkingService.getTotalAmountPaid("customer-5", plateNumber);
+        double total = parkingService.getTotalAmountPaid("TCCUSTTOTAL", plateNumber);
 
         assertEquals(12.75, total, 0.001);
     }
@@ -276,6 +296,25 @@ class ParkingServiceTest {
 
     private int countStoppedParkingEvents(String plateNumber) throws Exception {
         return countEvents(plateNumber, "STOPPED", false);
+    }
+
+    private int countActiveParkingEventsForSpace(String spaceNumber) throws Exception {
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     """
+                     SELECT COUNT(*)
+                     FROM parking_events pe
+                     JOIN parking_spaces ps ON pe.space_id = ps.space_id
+                     WHERE ps.space_number = ?
+                       AND pe.status = 'STARTED'
+                       AND pe.end_time IS NULL
+                     """)) {
+            statement.setString(1, spaceNumber);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getInt(1);
+            }
+        }
     }
 
     private int countPaymentTransactions(String plateNumber) throws Exception {

@@ -3,13 +3,22 @@ param(
     [ValidateSet("customer", "peo", "mo")]
     [string]$App,
 
-    [switch]$Cli
+    [switch]$Cli,
+
+    [switch]$Local,
+
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$CliArgs = @()
 )
 
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $RepoRoot
+
+if (-not $Cli -and $CliArgs.Count -gt 0) {
+    throw "Extra command arguments can only be used with -Cli."
+}
 
 function Read-DotEnv {
     param([string]$Path)
@@ -57,6 +66,13 @@ $envFile = Read-DotEnv ".env"
 
 $dbHosts = Use-Value $envFile "MULLIGAN_DB_HOSTS" ""
 $queueHosts = Use-Value $envFile "MULLIGAN_QUEUE_HOSTS" ""
+
+if ($Local) {
+    $dbHosts = "localhost:5432"
+    $queueHosts = "localhost:5672"
+    $env:MULLIGAN_RECOMMENDER_ENDPOINTS = "http://localhost:8081,http://localhost:8082,http://localhost:8083"
+}
+
 if ([string]::IsNullOrWhiteSpace($dbHosts) -or [string]::IsNullOrWhiteSpace($queueHosts)) {
     throw "Set MULLIGAN_DB_HOSTS and MULLIGAN_QUEUE_HOSTS in .env before running a UI."
 }
@@ -73,7 +89,9 @@ $env:MULLIGAN_QUEUE_HOST = First-Host $queueHosts
 $env:MULLIGAN_QUEUE_PORT = Use-Value $envFile "MULLIGAN_QUEUE_PORT" "5672"
 $env:MULLIGAN_QUEUE_TLS = Use-Value $envFile "MULLIGAN_QUEUE_TLS" "false"
 $env:MULLIGAN_HMAC_KEY = Use-Value $envFile "MULLIGAN_HMAC_KEY" "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-$env:MULLIGAN_RECOMMENDER_ENDPOINTS = Use-Value $envFile "MULLIGAN_RECOMMENDER_ENDPOINTS" "http://rec1:8081,http://rec2:8082,http://rec3:8083"
+if (-not $Local) {
+    $env:MULLIGAN_RECOMMENDER_ENDPOINTS = Use-Value $envFile "MULLIGAN_RECOMMENDER_ENDPOINTS" "http://rec1:8081,http://rec2:8082,http://rec3:8083"
+}
 
 if ($env:MULLIGAN_QUEUE_TLS -eq "true") {
     $storePassword = Use-Value $envFile "MULLIGAN_TLS_PASSWORD" "mulligan_tls_pw"
@@ -117,5 +135,10 @@ if ([string]::IsNullOrWhiteSpace($env:MULLIGAN_QUEUE_PASSWORD)) {
 }
 
 $task = if ($Cli) { "runCli" } else { "run" }
-& ".\gradlew.bat" "$project`:$task" "--no-daemon"
+$gradleArgs = @("$project`:$task", "--no-daemon")
+if ($Cli -and $CliArgs.Count -gt 0) {
+    $gradleArgs += "--args=$($CliArgs -join ' ')"
+}
+
+& ".\gradlew.bat" @gradleArgs
 exit $LASTEXITCODE

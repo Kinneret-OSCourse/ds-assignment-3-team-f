@@ -2,6 +2,7 @@ package com.mulligan.mo.view;
 
 import com.mulligan.mo.controller.MOController;
 import com.mulligan.mo.model.Citation;
+import com.mulligan.mo.model.CitationCount;
 import com.mulligan.mo.model.PaymentTransaction;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -154,13 +155,15 @@ public class MOView {
         transactionsButton.getStyleClass().addAll("action-button", "primary-button");
         Button citationsButton = new Button("Load Citation Report");
         citationsButton.getStyleClass().addAll("action-button", "secondary-button");
+        Button citationCountsButton = new Button("Load Citation Counts");
+        citationCountsButton.getStyleClass().addAll("action-button", "secondary-button");
 
         Label actionsTitle = new Label("Queue Report Controls");
         actionsTitle.getStyleClass().add("section-title");
         Label actionsSubtitle = new Label("Refresh each report separately so the office can review one stream at a time.");
         actionsSubtitle.getStyleClass().add("section-subtitle");
 
-        HBox actionsRow = new HBox(12, transactionsButton, citationsButton);
+        HBox actionsRow = new HBox(12, transactionsButton, citationsButton, citationCountsButton);
         VBox actionCard = new VBox(14, actionsTitle, actionsSubtitle, actionsRow);
         actionCard.getStyleClass().add("content-card");
 
@@ -226,6 +229,24 @@ public class MOView {
                 citationIdCol, citationVehicleCol, citationSpaceCol, citationZoneCol, citationTimeCol, citationAmountCol
         );
 
+        TableView<CitationCount> citationCountsTable = new TableView<>();
+        ObservableList<CitationCount> citationCountItems = FXCollections.observableArrayList();
+        citationCountsTable.setItems(citationCountItems);
+        citationCountsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        citationCountsTable.setPlaceholder(new Label("No citation counts loaded."));
+
+        TableColumn<CitationCount, String> countSpaceCol = new TableColumn<>("Space");
+        countSpaceCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getParkingSpaceId()));
+
+        TableColumn<CitationCount, String> countZoneCol = new TableColumn<>("Zone");
+        countZoneCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getParkingZoneId()));
+
+        TableColumn<CitationCount, String> countTotalCol = new TableColumn<>("Citations");
+        countTotalCol.setCellValueFactory(data -> new SimpleStringProperty(
+                String.valueOf(data.getValue().getCitationCount())));
+
+        citationCountsTable.getColumns().addAll(countSpaceCol, countZoneCol, countTotalCol);
+
         TabPane reportTabs = new TabPane();
         reportTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         reportTabs.getStyleClass().add("report-tabs");
@@ -242,7 +263,13 @@ public class MOView {
                 citationsTable
         ));
 
-        reportTabs.getTabs().addAll(transactionsTab, citationsTab);
+        Tab citationCountsTab = new Tab("Citation Counts", wrapTableCard(
+                "Citation Counts by Space",
+                "These totals include every active parking space.",
+                citationCountsTable
+        ));
+
+        reportTabs.getTabs().addAll(transactionsTab, citationsTab, citationCountsTab);
 
         TextArea messageArea = new TextArea();
         messageArea.setEditable(false);
@@ -282,6 +309,21 @@ public class MOView {
                 messageArea.setText("Error loading citations: " + ex.getMessage());
             } catch (RuntimeException ex) {
                 messageArea.setText("Runtime error loading citations: " + ex.getMessage());
+            }
+        });
+
+        citationCountsButton.setOnAction(e -> {
+            try {
+                List<CitationCount> citationCounts = moController.getCitationCountsBySpace();
+                citationCountItems.setAll(citationCounts);
+                reportTabs.getSelectionModel().select(citationCountsTab);
+                messageArea.setText(citationCounts.isEmpty()
+                        ? "No parking spaces found."
+                        : "Loaded citation counts for " + citationCounts.size() + " parking space(s).");
+            } catch (IOException | TimeoutException ex) {
+                messageArea.setText("Error loading citation counts: " + ex.getMessage());
+            } catch (RuntimeException ex) {
+                messageArea.setText("Runtime error loading citation counts: " + ex.getMessage());
             }
         });
 

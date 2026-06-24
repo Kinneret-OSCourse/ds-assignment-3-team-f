@@ -73,3 +73,9 @@ CLI examples:
 .\gradlew.bat :parking-recommender:runCli --args="mode http://localhost:8081 malicious"
 .\gradlew.bat :parking-system-CustomerUI:runCli --args="recommend S003"
 ```
+
+GUI example:
+
+```powershell
+.\scripts\run-malicious-ui.ps1
+```

@@ -2,6 +2,7 @@ package com.mulligan.mo.cli;
 
 import com.mulligan.mo.controller.MOController;
 import com.mulligan.mo.model.Citation;
+import com.mulligan.mo.model.CitationCount;
 import com.mulligan.mo.model.PaymentTransaction;
 import com.mulligan.mo.service.ParkingService;
 
@@ -79,6 +80,18 @@ public class MOCLI {
                     }
                     break;
 
+                case "citation-counts":
+                case "counts":
+                    List<CitationCount> citationCounts = controller.getCitationCountsBySpace();
+                    if (citationCounts.isEmpty()) {
+                        System.out.println("No parking spaces found.");
+                    } else {
+                        for (CitationCount citationCount : citationCounts) {
+                            System.out.println(citationCount);
+                        }
+                    }
+                    break;
+
                 default:
                     System.out.println("Unknown command.");
                     printUsage();
@@ -94,5 +107,6 @@ public class MOCLI {
         System.out.println("Usage:");
         System.out.println("  transactions");
         System.out.println("  citations");
+        System.out.println("  citation-counts");
     }
 }

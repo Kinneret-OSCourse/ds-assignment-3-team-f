@@ -1,6 +1,7 @@
 package com.mulligan.mo.service;
 
 import com.mulligan.mo.model.Citation;
+import com.mulligan.mo.model.CitationCount;
 import com.mulligan.mo.model.PaymentTransaction;
 import org.junit.jupiter.api.Test;
 
@@ -62,20 +63,45 @@ class ParkingServiceTest {
     }
 
     @Test
+    void getCitationCountsBySpaceReadsRowsFromDatabase() {
+        CitationCount expected = new CitationCount("S003", "A1", 4);
+        TestParkingService parkingService = new TestParkingService(
+                List.of(),
+                List.of(),
+                List.of(expected)
+        );
+
+        List<CitationCount> citationCounts = parkingService.getCitationCountsBySpace();
+
+        assertEquals(1, citationCounts.size());
+        assertEquals("S003", citationCounts.get(0).getParkingSpaceId());
+        assertEquals("A1", citationCounts.get(0).getParkingZoneId());
+        assertEquals(4, citationCounts.get(0).getCitationCount());
+    }
+
+    @Test
     void emptyDatabaseReportsReturnEmptyLists() {
         TestParkingService parkingService = new TestParkingService(List.of(), List.of());
 
         assertTrue(parkingService.getTransactionReport().isEmpty());
         assertTrue(parkingService.getCitationReport().isEmpty());
+        assertTrue(parkingService.getCitationCountsBySpace().isEmpty());
     }
 
     private static class TestParkingService extends ParkingService {
         private final List<PaymentTransaction> transactions;
         private final List<Citation> citations;
+        private final List<CitationCount> citationCounts;
 
         private TestParkingService(List<PaymentTransaction> transactions, List<Citation> citations) {
+            this(transactions, citations, List.of());
+        }
+
+        private TestParkingService(List<PaymentTransaction> transactions, List<Citation> citations,
+                                   List<CitationCount> citationCounts) {
             this.transactions = transactions;
             this.citations = citations;
+            this.citationCounts = citationCounts;
         }
 
         @Override
@@ -86,6 +112,11 @@ class ParkingServiceTest {
         @Override
         protected List<Citation> loadCitationReportFromDatabase() {
             return citations;
+        }
+
+        @Override
+        protected List<CitationCount> loadCitationCountsBySpaceFromDatabase() {
+            return citationCounts;
         }
     }
 }

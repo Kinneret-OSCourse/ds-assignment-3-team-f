@@ -70,6 +70,30 @@ public class PEOCLI {
                 }
                 break;
 
+            case "clear":
+                if (args.length != 2) {
+                    System.out.println("Usage: clear <spaceId>");
+                    return;
+                }
+                System.out.println(controller.clearCitation(args[1]));
+                break;
+
+            case "clear-all":
+                if (args.length != 1) {
+                    System.out.println("Usage: clear-all");
+                    return;
+                }
+                System.out.println(controller.clearAllCitations());
+                break;
+
+            case "count":
+                if (args.length != 2) {
+                    System.out.println("Usage: count <spaceId>");
+                    return;
+                }
+                System.out.println(controller.countCitationsForSpace(args[1]));
+                break;
+
             default:
                 System.out.println("Unknown command.");
                 printUsage();
@@ -80,5 +104,8 @@ public class PEOCLI {
         System.out.println("Usage:");
         System.out.println("  check <vehicleNumber> <spaceId>");
         System.out.println("  cite <vehicleNumber> <spaceId> <amount>");
+        System.out.println("  clear <spaceId>");
+        System.out.println("  clear-all");
+        System.out.println("  count <spaceId>");
     }
 }

@@ -7,6 +7,7 @@ import com.mulligan.common.security.ClientErrorCodes;
 import com.mulligan.common.security.MessageSigner;
 import com.mulligan.common.security.SecureMessage;
 import com.mulligan.mo.model.Citation;
+import com.mulligan.mo.model.CitationCount;
 import com.mulligan.mo.model.ParkingEvent;
 import com.mulligan.mo.model.PaymentTransaction;
 import com.rabbitmq.client.Channel;
@@ -509,6 +510,10 @@ public class ParkingService {
         return loadCitationReportFromDatabase();
     }
 
+    public List<CitationCount> getCitationCountsBySpace() {
+        return loadCitationCountsBySpaceFromDatabase();
+    }
+
     protected List<Citation> loadCitationReportFromDatabase() {
         List<Citation> citations = new ArrayList<>();
 
@@ -542,6 +547,38 @@ public class ParkingService {
         }
 
         return citations;
+    }
+
+    protected List<CitationCount> loadCitationCountsBySpaceFromDatabase() {
+        List<CitationCount> counts = new ArrayList<>();
+
+        String sql = """
+                SELECT ps.space_number, pz.zone_code, COUNT(c.citation_id) AS citation_count
+                FROM parking_spaces ps
+                JOIN parking_zones pz ON pz.zone_id = ps.zone_id
+                LEFT JOIN citations c ON c.space_id = ps.space_id
+                WHERE ps.is_active = true
+                GROUP BY ps.space_number, pz.zone_code
+                ORDER BY ps.space_number
+                """;
+
+        try (var conn = DatabaseConnection.getConnection();
+             var stmt = conn.prepareStatement(sql);
+             var rs = stmt.executeQuery()) {
+
+            while (rs.next()) {
+                counts.add(new CitationCount(
+                        rs.getString("space_number"),
+                        rs.getString("zone_code"),
+                        rs.getLong("citation_count")
+                ));
+            }
+        } catch (Exception e) {
+            LOG.security("MO DB error ctx=\"Error loading citation counts\" err=" + e.getClass().getSimpleName());
+            throw new RuntimeException(ClientErrorCodes.INTERNAL);
+        }
+
+        return counts;
     }
 
     /**

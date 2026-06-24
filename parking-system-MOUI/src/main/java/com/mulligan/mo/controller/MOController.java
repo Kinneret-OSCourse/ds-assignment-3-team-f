@@ -1,6 +1,7 @@
 package com.mulligan.mo.controller;
 
 import com.mulligan.mo.model.Citation;
+import com.mulligan.mo.model.CitationCount;
 import com.mulligan.mo.model.PaymentTransaction;
 import com.mulligan.mo.service.MOAuthService;
 import com.mulligan.mo.service.ParkingService;
@@ -89,5 +90,17 @@ public class MOController {
      */
     public List<Citation> getCitationReport() throws IOException, TimeoutException {
         return parkingService.getCitationReport();
+    }
+
+    /**
+     * Returns citation totals grouped by parking space. Spaces with zero
+     * citations are included so the MO can review every active space.
+     *
+     * @return citation totals for each active parking space
+     * @throws IOException      if the backing channel cannot be opened
+     * @throws TimeoutException if the broker times out during channel setup
+     */
+    public List<CitationCount> getCitationCountsBySpace() throws IOException, TimeoutException {
+        return parkingService.getCitationCountsBySpace();
     }
 }

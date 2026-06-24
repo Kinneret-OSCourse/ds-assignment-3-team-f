@@ -173,6 +173,15 @@ public class PEOView {
         issueCitationButton.getStyleClass().addAll("action-button", "secondary-button");
         issueCitationButton.setDisable(true);
 
+        Button clearCitationButton = new Button("Clear Citation");
+        clearCitationButton.getStyleClass().addAll("action-button", "secondary-button");
+
+        Button clearAllCitationsButton = new Button("Clear All Citations");
+        clearAllCitationsButton.getStyleClass().addAll("action-button", "secondary-button");
+
+        Button countCitationsButton = new Button("Count Citations");
+        countCitationsButton.getStyleClass().addAll("action-button", "secondary-button");
+
         Label resultValue = new Label("Awaiting inspection...");
         resultValue.getStyleClass().add("result-chip");
         String[] lastNotOkVehicle = {null};
@@ -180,7 +189,8 @@ public class PEOView {
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox actionRow = new HBox(12, checkVehicleButton, issueCitationButton, spacer, resultValue);
+        HBox actionRow = new HBox(12, checkVehicleButton, issueCitationButton, clearCitationButton,
+                countCitationsButton, clearAllCitationsButton, spacer, resultValue);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
         Label controlsTitle = new Label("Field Inspection Console");
@@ -262,6 +272,40 @@ public class PEOView {
                 resultValue.setText("Invalid amount");
                 messageArea.setText("Error: Citation amount must be a number.");
             }
+        });
+
+        clearCitationButton.setOnAction(e -> {
+            String parkingSpaceId = parkingSpaceField.getText().trim();
+
+            if (parkingSpaceId.isEmpty()) {
+                messageArea.setText("Error: Please fill in Parking Space ID.");
+                resultValue.setText("Incomplete form");
+                return;
+            }
+
+            String result = peoController.clearCitation(parkingSpaceId);
+            resultValue.setText(result.startsWith("Citation cleared") ? "Citation cleared" : "Clear citation result");
+            messageArea.setText(result);
+        });
+
+        countCitationsButton.setOnAction(e -> {
+            String parkingSpaceId = parkingSpaceField.getText().trim();
+
+            if (parkingSpaceId.isEmpty()) {
+                messageArea.setText("Error: Please fill in Parking Space ID.");
+                resultValue.setText("Incomplete form");
+                return;
+            }
+
+            String result = peoController.countCitationsForSpace(parkingSpaceId);
+            resultValue.setText("Citation count");
+            messageArea.setText(result);
+        });
+
+        clearAllCitationsButton.setOnAction(e -> {
+            String result = peoController.clearAllCitations();
+            resultValue.setText(result.startsWith("Cleared") ? "All citations cleared" : "Clear all result");
+            messageArea.setText(result);
         });
 
         VBox content = new VBox(20, hero, controlsCard, messageCard);

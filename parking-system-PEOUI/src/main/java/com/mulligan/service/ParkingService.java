@@ -393,6 +393,104 @@ public class ParkingService {
         }
     }
 
+    public boolean clearOneCitationForSpace(String spaceId) {
+        try {
+            InputValidator.requireSpace(spaceId);
+        } catch (ValidationException ve) {
+            LOG.security("PEO input rejected code=" + ve.getMessage());
+            throw new IllegalArgumentException(ClientErrorCodes.INVALID_INPUT);
+        }
+
+        try (var conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false);
+
+            try {
+                CitationSpaceDetails spaceDetails = findCitationSpaceDetails(conn, spaceId);
+                if (spaceDetails == null) {
+                    throw new IllegalArgumentException("Parking space not found.");
+                }
+
+                String deleteSql = """
+                        DELETE FROM citations
+                        WHERE citation_id = (
+                            SELECT citation_id
+                            FROM citations
+                            WHERE space_id = ?
+                            ORDER BY inspection_time DESC, created_at DESC, citation_id DESC
+                            LIMIT 1
+                        )
+                        """;
+
+                int deleted;
+                try (PreparedStatement stmt = conn.prepareStatement(deleteSql)) {
+                    stmt.setInt(1, spaceDetails.spaceId());
+                    deleted = stmt.executeUpdate();
+                }
+
+                conn.commit();
+                return deleted > 0;
+            } catch (Exception e) {
+                conn.rollback();
+                if (e instanceof IllegalArgumentException illegalArgumentException) {
+                    throw illegalArgumentException;
+                }
+                LOG.security("PEO DB error ctx=\"Error clearing citation\" err=" + e.getClass().getSimpleName());
+                throw new RuntimeException(ClientErrorCodes.INTERNAL);
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.security("PEO DB error ctx=\"Error clearing citation\" err=" + e.getClass().getSimpleName());
+            throw new RuntimeException(ClientErrorCodes.INTERNAL);
+        }
+    }
+
+    public int clearAllCitations() {
+        try (var conn = DatabaseConnection.getConnection()) {
+            String deleteSql = "DELETE FROM citations";
+            try (PreparedStatement stmt = conn.prepareStatement(deleteSql)) {
+                return stmt.executeUpdate();
+            }
+        } catch (Exception e) {
+            LOG.security("PEO DB error ctx=\"Error clearing all citations\" err=" + e.getClass().getSimpleName());
+            throw new RuntimeException(ClientErrorCodes.INTERNAL);
+        }
+    }
+
+    public int countCitationsForSpace(String spaceId) {
+        try {
+            InputValidator.requireSpace(spaceId);
+        } catch (ValidationException ve) {
+            LOG.security("PEO input rejected code=" + ve.getMessage());
+            throw new IllegalArgumentException(ClientErrorCodes.INVALID_INPUT);
+        }
+
+        try (var conn = DatabaseConnection.getConnection()) {
+            CitationSpaceDetails spaceDetails = findCitationSpaceDetails(conn, spaceId);
+            if (spaceDetails == null) {
+                throw new IllegalArgumentException("Parking space not found.");
+            }
+
+            String countSql = "SELECT COUNT(*) AS citation_count FROM citations WHERE space_id = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(countSql)) {
+                stmt.setInt(1, spaceDetails.spaceId());
+                try (var rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("citation_count");
+                    }
+                    return 0;
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            LOG.security("PEO DB error ctx=\"Error counting citations\" err=" + e.getClass().getSimpleName());
+            throw new RuntimeException(ClientErrorCodes.INTERNAL);
+        }
+    }
+
     protected void reportToQueue(String transactionId, String vehicleNumber, String parkingSpaceId, String parkingZoneId,
                                  LocalDateTime startTime, LocalDateTime endTime, double amount) {
         try {

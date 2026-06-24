@@ -37,9 +37,8 @@ public class ParkingService {
 
     /**
      * Starts a parking session for the given vehicle and parking space.
-     * If the same customer and vehicle already have an active parking session,
-     * that session is stopped and billed in the same database transaction before
-     * the new session is created.
+     * A customer has one assigned vehicle and may have only one active parking
+     * session. The current session must be stopped before starting another one.
      *
      * @param customerId customer identifier shown in the returned event object
      * @param vehicleNumber existing vehicle plate number
@@ -48,7 +47,6 @@ public class ParkingService {
      */
     public ParkingEvent startParking(String customerId, String vehicleNumber, String spaceId) {
         validateCustomerInput(customerId, vehicleNumber, spaceId);
-        StoppedParkingResult autoStoppedParking = null;
 
         try (var conn = DatabaseConnection.getConnection()) {
             conn.setAutoCommit(false);
@@ -65,26 +63,16 @@ public class ParkingService {
                     throw new IllegalArgumentException("Invalid parking space.");
                 }
 
-                if (hasActiveParkingForCustomerVehicle(conn, customerId, vehicleId)) {
-                    autoStoppedParking = stopParkingInternal(conn, customerId, vehicleId, vehicleNumber);
-                    persistTransaction(conn, autoStoppedParking);
+                if (hasActiveParkingForCustomer(conn, customerId)) {
+                    throw new IllegalArgumentException("Customer already has an active parking event.");
+                }
+
+                if (hasActiveParkingForSpace(conn, spaceDetails.spaceDbId())) {
+                    throw new IllegalArgumentException("Parking space is already occupied.");
                 }
 
                 ParkingEvent startedEvent = insertStartedParking(conn, customerId, vehicleNumber, vehicleId, spaceDetails);
                 conn.commit();
-
-                if (autoStoppedParking != null) {
-                    PaymentTransaction transaction = autoStoppedParking.transaction();
-                    reportToQueue(
-                            transaction.getTransactionId(),
-                            transaction.getVehicleNumber(),
-                            transaction.getParkingSpaceId(),
-                            transaction.getParkingZoneId(),
-                            transaction.getStartTime(),
-                            transaction.getStopTime(),
-                            transaction.getAmount()
-                    );
-                }
 
                 return startedEvent;
             } catch (Exception e) {
@@ -454,12 +442,18 @@ public class ParkingService {
 
     private void ensureVehicleAssignedToCustomer(java.sql.Connection conn, String customerId, int requestedVehicleId)
             throws java.sql.SQLException {
-        String assignedVehicleSql = "SELECT vehicle_id FROM customers WHERE customer_id = ? AND is_active = true";
+        String assignedVehicleSql = """
+                SELECT vehicle_id
+                FROM customers
+                WHERE customer_id = ?
+                  AND is_active = true
+                FOR UPDATE
+                """;
         try (var stmt = conn.prepareStatement(assignedVehicleSql)) {
             stmt.setString(1, customerId);
             try (var rs = stmt.executeQuery()) {
                 if (!rs.next()) {
-                    return;
+                    throw new IllegalArgumentException("Customer not found.");
                 }
 
                 int assignedVehicleId = rs.getInt("vehicle_id");
@@ -481,6 +475,7 @@ public class ParkingService {
                 JOIN parking_zones pz ON ps.zone_id = pz.zone_id
                 WHERE ps.space_number = ?
                   AND ps.is_active = true
+                FOR UPDATE OF ps
                 """;
 
         try (var stmt = conn.prepareStatement(spaceSql)) {
@@ -499,12 +494,29 @@ public class ParkingService {
         }
     }
 
-    private boolean hasActiveParkingForCustomerVehicle(java.sql.Connection conn, String customerId, int vehicleId) throws java.sql.SQLException {
+    private boolean hasActiveParkingForSpace(java.sql.Connection conn, int spaceDbId) throws java.sql.SQLException {
+        String activeSql = """
+                SELECT event_id
+                FROM parking_events
+                WHERE space_id = ?
+                  AND status = 'STARTED'
+                  AND end_time IS NULL
+                LIMIT 1
+                """;
+
+        try (var stmt = conn.prepareStatement(activeSql)) {
+            stmt.setInt(1, spaceDbId);
+            try (var rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    private boolean hasActiveParkingForCustomer(java.sql.Connection conn, String customerId) throws java.sql.SQLException {
         String activeSql = """
                 SELECT event_id
                 FROM parking_events
                 WHERE customer_id = ?
-                  AND vehicle_id = ?
                   AND status = 'STARTED'
                   AND end_time IS NULL
                 LIMIT 1
@@ -512,7 +524,6 @@ public class ParkingService {
 
         try (var stmt = conn.prepareStatement(activeSql)) {
             stmt.setString(1, customerId);
-            stmt.setInt(2, vehicleId);
             try (var rs = stmt.executeQuery()) {
                 return rs.next();
             }
