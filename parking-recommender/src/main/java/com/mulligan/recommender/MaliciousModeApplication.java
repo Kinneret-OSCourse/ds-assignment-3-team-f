@@ -6,11 +6,10 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -27,7 +26,7 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * Small GUI for switching one recommender server into malicious mode.
+ * Small GUI for switching recommender servers into malicious mode.
  */
 public class MaliciousModeApplication extends Application {
 
@@ -46,16 +45,9 @@ public class MaliciousModeApplication extends Application {
         TextField rec3Url = new TextField(envOr("MULLIGAN_REC3_URL", "http://localhost:8083"));
         TextField testSpace = new TextField(envOr("MULLIGAN_TEST_SPACE", "S003"));
 
-        RadioButton none = new RadioButton("None");
-        RadioButton rec1 = new RadioButton("rec-1");
-        RadioButton rec2 = new RadioButton("rec-2");
-        RadioButton rec3 = new RadioButton("rec-3");
-        ToggleGroup maliciousChoice = new ToggleGroup();
-        none.setToggleGroup(maliciousChoice);
-        rec1.setToggleGroup(maliciousChoice);
-        rec2.setToggleGroup(maliciousChoice);
-        rec3.setToggleGroup(maliciousChoice);
-        none.setSelected(true);
+        CheckBox rec1 = new CheckBox("rec-1");
+        CheckBox rec2 = new CheckBox("rec-2");
+        CheckBox rec3 = new CheckBox("rec-3");
 
         TextArea output = new TextArea();
         output.setEditable(false);
@@ -69,7 +61,7 @@ public class MaliciousModeApplication extends Application {
         form.addRow(1, new Label("rec-2 URL"), rec2Url);
         form.addRow(2, new Label("rec-3 URL"), rec3Url);
         form.addRow(3, new Label("Test space"), testSpace);
-        form.addRow(4, new Label("Malicious server"), new HBox(12, none, rec1, rec2, rec3));
+        form.addRow(4, new Label("Malicious servers"), new HBox(12, rec1, rec2, rec3));
 
         Button apply = new Button("Apply Mode");
         Button reset = new Button("All Normal");
@@ -78,10 +70,10 @@ public class MaliciousModeApplication extends Application {
 
         apply.setOnAction(e -> runAsync(() -> {
             List<NodeTarget> nodes = nodes(rec1Url.getText(), rec2Url.getText(), rec3Url.getText());
-            String selected = selectedNode(maliciousChoice);
+            List<String> selected = selectedNodes(rec1, rec2, rec3);
             StringBuilder result = new StringBuilder();
             for (NodeTarget node : nodes) {
-                boolean malicious = node.id().equals(selected);
+                boolean malicious = selected.contains(node.id());
                 result.append(setMode(node, malicious)).append(System.lineSeparator());
             }
             result.append(System.lineSeparator()).append(loadVotes(nodes, testSpace.getText()));
@@ -89,7 +81,9 @@ public class MaliciousModeApplication extends Application {
         }, output));
 
         reset.setOnAction(e -> {
-            none.setSelected(true);
+            rec1.setSelected(false);
+            rec2.setSelected(false);
+            rec3.setSelected(false);
             runAsync(() -> {
                 StringBuilder result = new StringBuilder();
                 for (NodeTarget node : nodes(rec1Url.getText(), rec2Url.getText(), rec3Url.getText())) {
@@ -120,7 +114,7 @@ public class MaliciousModeApplication extends Application {
         buttons.setAlignment(Pos.CENTER_LEFT);
 
         Label title = new Label("Mulligan Malicious Recommender Control");
-        Label subtitle = new Label("Choose one server to return the incorrect table row MAL-rec-X;999.");
+        Label subtitle = new Label("Choose one or more servers to return the incorrect table row MAL-rec-X;999.");
         VBox root = new VBox(16, title, subtitle, form, buttons, output);
         root.setPadding(new Insets(22));
 
@@ -138,11 +132,11 @@ public class MaliciousModeApplication extends Application {
         );
     }
 
-    private String selectedNode(ToggleGroup group) {
-        if (group.getSelectedToggle() instanceof RadioButton selected) {
-            return selected.getText();
-        }
-        return "None";
+    private List<String> selectedNodes(CheckBox rec1, CheckBox rec2, CheckBox rec3) {
+        return List.of(rec1, rec2, rec3).stream()
+                .filter(CheckBox::isSelected)
+                .map(CheckBox::getText)
+                .toList();
     }
 
     private String setMode(NodeTarget node, boolean malicious) {
