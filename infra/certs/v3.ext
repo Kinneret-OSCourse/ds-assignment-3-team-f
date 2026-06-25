@@ -1,8 +1,0 @@
-subjectAltName = @alt_names
-extendedKeyUsage = serverAuth
-[alt_names]
-DNS.1 = rabbit-1
-DNS.2 = rabbit-2
-DNS.3 = rabbit-3
-DNS.4 = haproxy
-DNS.5 = localhost

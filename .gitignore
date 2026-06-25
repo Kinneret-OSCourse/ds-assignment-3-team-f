@@ -49,7 +49,4 @@ parking-system-CustomerUI/PEO_UI/
 .vscode/
 
 ### Mac OS ###
-.DS_Store.gradle/
-.idea/
-target/
-build/
+.DS_Store
