@@ -166,10 +166,7 @@ VALUES
     ('394-23-797', 'Daniel Shalev'),
     ('487-36-686', 'Lior Green'),
     ('682-14-762', 'Roni Katz'),
-    ('513-77-315', 'Yael Mor'),
-    ('233-47-038', 'Amit Ben David'),
-    ('412-60-971', 'Tamar Klein'),
-    ('286-66-320', 'Noam Peretz')
+    ('513-77-315', 'Yael Mor')
 ON CONFLICT (plate_number) DO NOTHING;
 
 UPDATE customers
