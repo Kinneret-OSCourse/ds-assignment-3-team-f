@@ -67,7 +67,6 @@ require_cmd() {
   }
 }
 require_cmd openssl
-require_cmd keytool
 
 # -------- CA --------
 openssl genrsa -out "$PRIVATE_OUT/ca-key.pem" 4096
@@ -106,8 +105,18 @@ openssl x509 -req -in "$OUT/server.csr" -CA "$OUT/ca.pem" -CAkey "$PRIVATE_OUT/c
   -out "$OUT/server-cert.pem" -days 825 -sha256 -extfile "$OUT/v3.ext"
 
 # -------- Java truststore --------
-keytool -importcert -alias mulligan-ca -file "$OUT/ca.pem" \
-  -keystore "$OUT/truststore.p12" -storetype PKCS12 -storepass "$PASS" -noprompt
+if command -v keytool >/dev/null 2>&1 && keytool -help >/dev/null 2>&1; then
+  keytool -importcert -alias mulligan-ca -file "$OUT/ca.pem" \
+    -keystore "$OUT/truststore.p12" -storetype PKCS12 -storepass "$PASS" -noprompt
+else
+  require_cmd docker
+  echo "keytool is unavailable locally; creating PKCS12 truststore with a temporary Java container."
+  docker run --rm \
+    -v "$OUT:/certs" \
+    eclipse-temurin:21-jre \
+    keytool -importcert -alias mulligan-ca -file /certs/ca.pem \
+    -keystore /certs/truststore.p12 -storetype PKCS12 -storepass "$PASS" -noprompt
+fi
 
 # -------- Per-service client certs (optional mTLS) --------
 for svc in customer peo mo server; do
